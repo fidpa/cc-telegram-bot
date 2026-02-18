@@ -1,0 +1,56 @@
+# dependencies (bun install)
+node_modules
+
+# output
+out
+dist
+*.tgz
+
+# code coverage
+coverage
+*.lcov
+
+# logs
+logs
+_.log
+report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
+
+# dotenv environment variable files
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+
+# user-specific MCP config (use mcp-config.example.ts as template)
+mcp-config.ts
+
+# caches
+.eslintcache
+.cache
+*.tsbuildinfo
+
+# IntelliJ based IDEs
+.idea
+
+# Cursor
+.cursor
+
+# Finder (MacOS) folder config
+.DS_Store
+
+# Whisper model files (large binaries)
+models/
+
+# Personal / marketing content (not part of the project)
+LINKEDIN_POST.md
+
+# Nextcloud sync conflict files
+*.md._conflict_*
+*._conflict_*
+
+# Bun cache
+.bun/
+
+# VS Code
+.vscode/

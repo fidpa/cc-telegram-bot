@@ -1,0 +1,9 @@
+[Unit]
+Description=CC Telegram Bot Daily Report Timer
+
+[Timer]
+OnCalendar=*-*-* 23:55:00
+Persistent=false
+
+[Install]
+WantedBy=timers.target

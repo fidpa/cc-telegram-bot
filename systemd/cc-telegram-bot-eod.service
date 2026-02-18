@@ -1,0 +1,10 @@
+[Unit]
+Description=CC Telegram Bot Daily Report Trigger
+Requires=cc-telegram-bot.service
+After=cc-telegram-bot.service
+
+[Service]
+Type=oneshot
+# Adjust User to match your setup
+User=your-username
+ExecStart=/path/to/cc-telegram-bot/scripts/trigger-eod-report.sh
