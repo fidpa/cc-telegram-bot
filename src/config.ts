@@ -43,7 +43,7 @@ export const ALLOWED_USERS: number[] = (
   .filter((x) => !isNaN(x));
 
 export const WORKING_DIR = process.env.CLAUDE_WORKING_DIR || HOME;
-export const CLAUDE_MODEL = process.env.CLAUDE_MODEL || "claude-sonnet-4-5";
+export const CLAUDE_MODEL = process.env.CLAUDE_MODEL || "claude-sonnet-4-6";
 
 // Group chat whitelist (comma-separated group IDs in env)
 export const ALLOWED_GROUP_IDS: number[] = (
