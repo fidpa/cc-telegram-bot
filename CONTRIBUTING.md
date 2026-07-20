@@ -38,6 +38,7 @@ cc-telegram-bot/
 |   +-- ...
 +-- ask_user_mcp/      # MCP server for Telegram inline keyboards
 +-- launchagent/       # macOS LaunchAgent for always-on operation
++-- systemd/           # Linux systemd service + timer for the EOD report
 +-- docs/              # Documentation (security, audit report)
 +-- CLAUDE.md          # System prompt (loaded by Claude)
 ```

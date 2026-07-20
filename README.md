@@ -97,7 +97,7 @@ All configuration via environment variables (see [.env.example](.env.example)):
 | `TELEGRAM_BOT_TOKEN` | Yes | Bot token from @BotFather |
 | `TELEGRAM_ALLOWED_USERS` | Yes | Comma-separated Telegram user IDs |
 | `CLAUDE_WORKING_DIR` | Recommended | Working directory for Claude (loads CLAUDE.md) |
-| `CLAUDE_MODEL` | Optional | Default Claude model (default: `claude-sonnet-4-5`) |
+| `CLAUDE_MODEL` | Optional | Default Claude model (default: `claude-sonnet-5`) |
 | `WHISPER_MODE` | Optional | `local` (default) or `off` -- voice transcription mode |
 | `WHISPER_MODEL_PATH` | Optional | Path to GGML whisper model |
 | `WHISPER_LANGUAGE` | Optional | Whisper language code (default: `de`) |
@@ -114,8 +114,8 @@ All configuration via environment variables (see [.env.example](.env.example)):
 | `ALERT_DB_PATH` | Optional | SQLite alert history database (default: `~/.cc-telegram-bot/alerts.db`) |
 | `DAILY_LOG_DIR` | Optional | Directory for daily bot reports |
 | `ANTHROPIC_API_KEY` | Optional | API key (alternative to CLI auth) |
-| `THINKING_KEYWORDS` | Optional | Keywords triggering extended thinking |
-| `THINKING_DEEP_KEYWORDS` | Optional | Keywords triggering deep thinking (50k tokens) |
+| `THINKING_KEYWORDS` | Optional | Keywords triggering adaptive thinking (`effort: high`) |
+| `THINKING_DEEP_KEYWORDS` | Optional | Keywords triggering deep thinking (`effort: max`) |
 
 MCP servers are configured in `mcp-config.ts` (see [mcp-config.example.ts](mcp-config.example.ts)).
 
@@ -258,6 +258,7 @@ cc-telegram-bot/
 +-- ask_user_mcp/          # MCP server for interactive Telegram buttons
 +-- scripts/               # Utility scripts (test-alert, trigger-eod-report)
 +-- launchagent/           # macOS LaunchAgent for always-on operation
++-- systemd/               # Linux systemd service + timer for the EOD report
 +-- docs/
 |   +-- security-limitations.md  # Architectural security analysis
 |   +-- SECURITY_AUDIT_REPORT.md # Full audit with all findings
@@ -283,7 +284,7 @@ Alert Socket -> JSON validation (Zod) -> Secret check -> SQLite insert -> Rate l
 |-----------|-----------|
 | Runtime | [Bun](https://bun.sh/) |
 | Language | TypeScript 5 (strict mode) |
-| AI Backend | [Claude Agent SDK](https://docs.anthropic.com/en/docs/build-with-claude/agent-sdk) |
+| AI Backend | [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk) |
 | Voice Transcription | [whisper.cpp](https://github.com/ggerganov/whisper.cpp) (local, GGML model) |
 | Telegram Library | [grammY](https://grammy.dev/) |
 | Tool Integration | [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) |
@@ -456,4 +457,4 @@ Marc Allgeier ([@fidpa](https://github.com/fidpa))
 
 ---
 
-**Production-tested since January 2026** | 24 security layers | ~3,500 lines TypeScript | ~1,200 lines documentation
+**Production-tested since January 2026** | 24 security layers | ~5,900 lines TypeScript | ~2,000 lines documentation

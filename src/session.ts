@@ -34,24 +34,46 @@ import type {
   TokenUsage,
 } from "./types";
 
+type ThinkingLevel = "off" | "normal" | "deep";
+
 /**
- * Determine thinking token budget based on message keywords.
+ * Determine thinking level based on message keywords.
  */
-function getThinkingLevel(message: string): number {
+function getThinkingLevel(message: string): ThinkingLevel {
   const msgLower = message.toLowerCase();
 
   // Check deep thinking triggers first (more specific)
   if (THINKING_DEEP_KEYWORDS.some((k) => msgLower.includes(k))) {
-    return 50000;
+    return "deep";
   }
 
   // Check normal thinking triggers
   if (THINKING_KEYWORDS.some((k) => msgLower.includes(k))) {
-    return 10000;
+    return "normal";
   }
 
   // Default: no thinking
-  return 0;
+  return "off";
+}
+
+/**
+ * Map a thinking level to SDK options.
+ *
+ * The deprecated `maxThinkingTokens` is only honoured as on/off on current
+ * models, which collapsed "deep" into "normal". `effort` restores the
+ * distinction between the two enabled levels.
+ */
+function getThinkingOptions(
+  level: ThinkingLevel
+): Pick<Options, "thinking" | "effort"> {
+  switch (level) {
+    case "deep":
+      return { thinking: { type: "adaptive" }, effort: "max" };
+    case "normal":
+      return { thinking: { type: "adaptive" }, effort: "high" };
+    case "off":
+      return { thinking: { type: "disabled" } };
+  }
 }
 
 /**
@@ -192,10 +214,7 @@ class ClaudeSession {
     await Bun.write(genericContextFile, contextData);
 
     const isNewSession = !this.isActive;
-    const thinkingTokens = getThinkingLevel(message);
-    const thinkingLabel =
-      { 0: "off", 10000: "normal", 50000: "deep" }[thinkingTokens] ||
-      String(thinkingTokens);
+    const thinkingLabel = getThinkingLevel(message);
 
     // Inject current date/time at session start so Claude doesn't need to call a tool for it
     let messageToSend = message;
@@ -226,7 +245,7 @@ class ClaudeSession {
       allowDangerouslySkipPermissions: true,
       systemPrompt: SAFETY_PROMPT,
       mcpServers: MCP_SERVERS,
-      maxThinkingTokens: thinkingTokens,
+      ...getThinkingOptions(thinkingLabel),
       additionalDirectories: ALLOWED_PATHS,
       resume: this.sessionId || undefined,
     };

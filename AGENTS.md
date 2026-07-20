@@ -13,7 +13,7 @@ bun install        # Install dependencies
 
 ## Architecture
 
-This is a Telegram bot (~3,500 lines TypeScript) that lets you control Claude Code from your phone via text, voice, photos, and documents. Built with Bun and grammY.
+This is a Telegram bot (~5,900 lines TypeScript) that lets you control Claude Code from your phone via text, voice, photos, and documents. Built with Bun and grammY.
 
 ### Message Flow
 
@@ -27,8 +27,9 @@ Alert socket -> Zod validation -> Secret check -> Rate limit -> Alert queue -> C
 - **`src/index.ts`** -- Entry point, registers handlers, starts polling, environment isolation (Layer 16)
 - **`src/config.ts`** -- Environment parsing, MCP loading, safety prompts, blocked command patterns
 - **`src/session.ts`** -- `ClaudeSession` class wrapping Agent SDK with streaming, session persistence, and defense-in-depth safety checks (path validation on tool calls)
-- **`src/security.ts`** -- `RateLimiter` (token bucket), `isPathAllowed()`, `isCommandSafe()` (regex patterns), `isUserAuthorized()`
+- **`src/security.ts`** -- `RateLimiter` (token bucket), `isPathAllowed()`, `checkCommandSafety()` (regex patterns), `isAuthorized()`
 - **`src/alert-socket.ts`** -- Unix socket listener for system alerts, alert prompts, EOD report generation
+- **`src/alert-db.ts`** -- SQLite alert history store (`bun:sqlite`, WAL mode, prepared statements, 0o600)
 - **`src/formatting.ts`** -- Markdown to HTML conversion for Telegram, tool status formatting
 - **`src/utils.ts`** -- Audit logging (HMAC-SHA256), voice transcription (local whisper-cli), typing indicators, output redaction, log sanitization (console wrapper)
 - **`src/types.ts`** -- Shared TypeScript types
