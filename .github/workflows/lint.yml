@@ -1,0 +1,170 @@
+name: lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Least privilege: every job only reads the repo. (gitleaks-action reads PR
+# metadata through the same token; nothing here ever writes.)
+permissions:
+  contents: read
+
+# Superseded runs on the same ref are wasted minutes - cancel them.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck:
+    name: TypeScript (tsc --noEmit, strict)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # --frozen-lockfile so a drifted bun.lock fails here instead of being
+      # silently repaired. The lockfile lagged two dependency bumps behind
+      # package.json until v1.2.0 precisely because nothing ever checked.
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # tsconfig.json has no "include", so this covers every .ts in the tree:
+      # src/, ask_user_mcp/server.ts and mcp-config.example.ts.
+      - name: Typecheck
+        run: bun run typecheck
+
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run shellcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          # Fail on warnings; suppress SC1091 (launchagent/start.sh sources a
+          # .env that does not exist in the repo - by design).
+          shellcheck \
+            --severity=warning \
+            --exclude=SC1091 \
+            --shell=bash \
+            scripts/trigger-eod-report.sh \
+            launchagent/start.sh
+
+  plist:
+    name: LaunchAgent template (XML well-formed)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # plutil is macOS-only; the runner is Linux, so parse it as plain XML.
+      # This catches the realistic failure (a broken edit), not schema drift.
+      - name: Parse plist template
+        run: |
+          python3 -c "import xml.dom.minidom; \
+            xml.dom.minidom.parse('launchagent/com.cc-telegram-bot.plist.template'); \
+            print('plist XML ok')"
+
+  config-docs:
+    name: Config documented (code / .env.example / README)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # An undocumented environment variable is only findable in the source.
+      # CLAUDE_CODE_PATH and DOCS_DIR were exactly that until 2026-08-08.
+      # Exempt: HOME/PATH are OS variables, OPENAI_API_KEY and
+      # TYPEFULLY_API_KEY only appear on the env strip-list, ANTHROPIC_API_KEY
+      # is read by the Agent SDK rather than by this code.
+      - name: Environment variables in code vs .env.example
+        run: |
+          diff \
+            <(grep -ohE 'process\.env\.[A-Z_]{4,}' src/*.ts src/handlers/*.ts \
+                | sed 's/.*env\.//' | sort -u \
+                | grep -vE '^(HOME|PATH|OPENAI_API_KEY|TYPEFULLY_API_KEY)$') \
+            <(grep -ohE "^#? ?[A-Z_]{4,}=" .env.example | tr -d '# =' | sort -u \
+                | grep -v '^ANTHROPIC_API_KEY$')
+
+      - name: .env.example vs README configuration table
+        run: |
+          diff \
+            <(grep -ohE "^#? ?[A-Z_]{4,}=" .env.example | tr -d '# =' | sort -u) \
+            <(sed -n '/^| Variable | Required/,/^$/p' README.md \
+                | grep -oE '^\| `[A-Z_]+`' | tr -d '|` ' | sort -u)
+
+      # Every registered bot command must appear in the README. /m is an alias
+      # in the same table row as /model, so match all backticked `/x` forms.
+      - name: Bot commands vs README
+        run: |
+          diff \
+            <(grep -oE 'bot\.command\("[a-z]+"' src/index.ts \
+                | sed 's/.*("//;s/"//' | sort -u) \
+            <(grep -oE '`/[a-z]+`' README.md | tr -d '`/' | sort -u)
+
+  links:
+    name: Relative Markdown links resolve
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check relative links
+        run: |
+          python3 - <<'EOF'
+          import re, os, glob, sys
+          bad = []
+          for f in glob.glob('*.md') + glob.glob('docs/**/*.md', recursive=True):
+              base = os.path.dirname(f)
+              for m in re.finditer(r'\[[^\]]*\]\(([^)#\s]+)\)', open(f).read()):
+                  t = m.group(1)
+                  if t.startswith(('http', 'mailto:')):
+                      continue
+                  if not os.path.exists(os.path.normpath(os.path.join(base, t))):
+                      bad.append(f"{f} -> {t}")
+          if bad:
+              print("BROKEN:", *bad, sep="\n  ")
+              sys.exit(1)
+          print("all relative links OK")
+          EOF
+
+  changelog:
+    name: Changelog link definitions complete
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # v1.2.0 shipped without its [1.2.0]: compare link, which left
+      # [Unreleased] pointing one release too far back. The block sits at the
+      # end of the file, where nobody scrolls.
+      - name: Every version section has a link definition
+        run: |
+          missing=0
+          for v in $(grep -oE '^## \[[0-9]+\.[0-9]+\.[0-9]+\]' CHANGELOG.md | tr -d '#[] '); do
+            if grep -q "^\[$v\]:" CHANGELOG.md; then
+              echo "OK    $v"
+            else
+              echo "MISSING link definition: $v"
+              missing=1
+            fi
+          done
+          exit $missing
+
+  gitleaks:
+    name: gitleaks (secret scan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history: a secret that was committed and later removed is
+          # still leaked. A leaked Telegram bot token is remote access to other
+          # people's chats, not just an exposed string.
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

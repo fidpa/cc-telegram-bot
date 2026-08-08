@@ -98,8 +98,12 @@ All configuration via environment variables (see [.env.example](.env.example)):
 | `TELEGRAM_ALLOWED_USERS` | Yes | Comma-separated Telegram user IDs |
 | `CLAUDE_WORKING_DIR` | Recommended | Working directory for Claude (loads CLAUDE.md) |
 | `CLAUDE_MODEL` | Optional | Default Claude model (default: `claude-sonnet-5`) |
+| `CLAUDE_CLI_PATH` | Optional | Path to the Claude CLI (auto-detected from `PATH`) |
+| `CLAUDE_CODE_PATH` | Optional | Path to the Claude Code executable for the Agent SDK (standalone builds) |
+| `DOCS_DIR` | Optional | Directory scanned for existing documentation during alert handling (default: `~/Documents/docs`) |
 | `WHISPER_MODE` | Optional | `local` (default) or `off` -- voice transcription mode |
 | `WHISPER_MODEL_PATH` | Optional | Path to GGML whisper model |
+| `WHISPER_CLI_PATH` | Optional | Path to the `whisper-cli` binary (auto-detected from `PATH`) |
 | `WHISPER_LANGUAGE` | Optional | Whisper language code (default: `de`) |
 | `ALLOWED_PATHS` | Optional | Directories Claude can access (default: working dir, ~/Documents, ~/Downloads, ~/Desktop, ~/.claude) |
 | `RATE_LIMIT_ENABLED` | Optional | Enable rate limiting (default: `true`) |
@@ -108,6 +112,8 @@ All configuration via environment variables (see [.env.example](.env.example)):
 | `AUDIT_LOG_PATH` | Optional | Audit log location (default: `~/.cc-telegram-bot/audit.log`) |
 | `AUDIT_LOG_JSON` | Optional | JSON format for logs (default: `true`) |
 | `AUDIT_LOG_HMAC_KEY` | Optional | HMAC key for log integrity (auto-generated if not set) |
+| `AUDIT_LOG_MAX_SIZE` | Optional | Size in bytes before rotation (default: `10485760`) |
+| `AUDIT_LOG_MAX_FILES` | Optional | Number of rotated log files to keep (default: `5`) |
 | `TELEGRAM_ALLOWED_GROUPS` | Optional | Comma-separated Telegram group IDs for group chat support |
 | `ALERT_SOCKET_PATH` | Optional | Unix socket path for alerts (default: `/run/cc-telegram-bot/alerts.sock`) |
 | `ALERT_SOCKET_SECRET` | Optional | Shared secret for socket authentication (recommended for production) |

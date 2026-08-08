@@ -83,6 +83,7 @@ All config via `.env` (copy from `.env.example`). Key variables:
 - `CLAUDE_WORKING_DIR` -- Working directory for Claude
 - `ALLOWED_PATHS` -- Directories Claude can access
 - `ALERT_SOCKET_PATH`, `ALERT_SOCKET_SECRET` -- Alert socket configuration
+- `DOCS_DIR` -- Directory scanned for existing documentation during alert handling
 - `WHISPER_MODE` -- Voice transcription mode (`local` or `off`)
 - `AUDIT_LOG_HMAC_KEY` -- HMAC key for audit log integrity
 

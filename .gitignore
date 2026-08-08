@@ -44,6 +44,14 @@ models/
 
 # Personal / marketing content (not part of the project)
 LINKEDIN_POST.md
+REDDIT_POST.md
+TODO.md
+NOTES.md
+
+# Local agent tooling (slash commands, session settings) - not part of the project.
+# NOTE: CLAUDE.md is deliberately NOT ignored here. In this repository it is a
+# shipped example system prompt, documented in README.md and CONTRIBUTING.md.
+.claude/
 
 # Nextcloud sync conflict files
 *.md._conflict_*

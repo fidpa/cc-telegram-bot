@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-08-08
+
+### Added
+- Continuous integration (`.github/workflows/lint.yml`). The repository had no CI at all
+  until now -- every check ran locally or not at all. On push and pull request it runs:
+  typecheck (`bun install --frozen-lockfile` + `bun run typecheck`), ShellCheck on the two
+  shell scripts, an XML parse of the LaunchAgent template, three configuration-documentation
+  gates, a relative-link check across all Markdown, a changelog link-definition check,
+  and gitleaks over the full history
+- `CLAUDE_CODE_PATH` documented in `.env.example` and `README.md`. It sets the Claude Code
+  executable handed to the Agent SDK (`src/session.ts`) and is needed for standalone builds
+- `DOCS_DIR` documented in `.env.example` and `README.md`. Claude scans this directory for
+  existing documentation before diagnosing an alert (`src/config.ts`); default `~/Documents/docs`
+
+### Fixed
+- `CLAUDE_CODE_PATH` and `DOCS_DIR` were configurable in code but appeared in no
+  documentation -- they were findable only by reading the source
+- README configuration table completed: `CLAUDE_CLI_PATH`, `WHISPER_CLI_PATH`,
+  `AUDIT_LOG_MAX_SIZE` and `AUDIT_LOG_MAX_FILES` were documented in `.env.example`
+  but missing from the table
+- Changelog link definitions: the `[1.2.0]` compare link was never added in the 1.2.0
+  release, which also left `[Unreleased]` comparing against `v1.1.0` -- one release too
+  far back. Both corrected, and the check is now part of CI
+
+### Changed
+- `.gitignore` now covers local agent tooling (`.claude/`) and further private note formats
+  (`REDDIT_POST.md`, `TODO.md`, `NOTES.md`). `CLAUDE.md` stays versioned on purpose: it is
+  the shipped example system prompt, documented in `README.md` and `CONTRIBUTING.md`
+
 ## [1.2.0] - 2026-07-20
 
 ### Changed
@@ -103,6 +132,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [linuz90/claude-telegram-bot](https://github.com/linuz90/claude-telegram-bot) (MIT License)
 - Core architecture: grammY Telegram bot, Claude Agent SDK integration, streaming responses, multi-modal input (text, voice, photo, document, video), MCP support
 
-[Unreleased]: https://github.com/fidpa/cc-telegram-bot/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/fidpa/cc-telegram-bot/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/fidpa/cc-telegram-bot/compare/v1.2.0...v1.2.1
+[1.2.0]: https://github.com/fidpa/cc-telegram-bot/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/fidpa/cc-telegram-bot/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/fidpa/cc-telegram-bot/releases/tag/v1.0.0
