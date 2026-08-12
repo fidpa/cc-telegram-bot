@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-08-12
+
+### Fixed
+- `scripts/trigger-eod-report.sh` shipped without the executable bit since v1.0.0.
+  Running it directly (`./scripts/trigger-eod-report.sh`) failed with
+  "Permission denied"; it only worked when invoked as `bash scripts/trigger-eod-report.sh`
+
 ## [1.2.1] - 2026-08-08
 
 ### Added
@@ -132,7 +139,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [linuz90/claude-telegram-bot](https://github.com/linuz90/claude-telegram-bot) (MIT License)
 - Core architecture: grammY Telegram bot, Claude Agent SDK integration, streaming responses, multi-modal input (text, voice, photo, document, video), MCP support
 
-[Unreleased]: https://github.com/fidpa/cc-telegram-bot/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/fidpa/cc-telegram-bot/compare/v1.2.2...HEAD
+[1.2.2]: https://github.com/fidpa/cc-telegram-bot/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/fidpa/cc-telegram-bot/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/fidpa/cc-telegram-bot/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/fidpa/cc-telegram-bot/compare/v1.0.0...v1.1.0
