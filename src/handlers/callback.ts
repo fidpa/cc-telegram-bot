@@ -7,7 +7,7 @@
 import type { Context } from "grammy";
 import { unlinkSync } from "fs";
 import { getSession } from "../session";
-import { ALLOWED_USERS } from "../config";
+import { ALLOWED_USERS, ASK_USER_DIR } from "../config";
 import { CostLimitError } from "../cost";
 import { isAuthorized } from "../security";
 import { auditLog, startTypingIndicator } from "../utils";
@@ -55,8 +55,7 @@ export async function handleCallback(ctx: Context): Promise<void> {
   const optionIndex = parseInt(parts[2]!, 10);
 
   // 3. Load request file from secured directory
-  const homeDir = process.env.HOME || "/tmp";
-  const requestFile = `${homeDir}/.cc-telegram-bot/ask-user/ask-user-${requestId}.json`;
+  const requestFile = `${ASK_USER_DIR}/ask-user-${requestId}.json`;
   let requestData: {
     question: string;
     options: string[];

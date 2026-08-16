@@ -255,7 +255,30 @@ Instead of dropping alerts when the alert session is busy, alerts are queued (bo
 
 ### Layer 23: Per-User Context Files (SEC-F7)
 
-MCP ask-user context files are scoped per user (`query-context-{userId}.json`) to prevent cross-user race conditions when multiple users interact simultaneously.
+The bot writes the ask-user chat context to a per-user file
+(`query-context-{userId}.json`) in `~/.<BOT_ID>/ask-user/`, alongside a shared
+`query-context.json` kept for MCP-server compatibility.
+
+**Measured rather than assumed.** Until v1.3.1 the per-user write was not
+protection at all: the MCP subprocess read only the shared file, because it had
+no way to tell which user it was serving. Two authorized users interacting at
+the same moment raced on that file, and the loser's inline keyboard went to the
+other's chat.
+
+Both halves are closed as of v1.3.1:
+
+- *Across instances* -- the directory derives from `BOT_ID` and is mode 0o700,
+  so two bots on one machine no longer share the handshake.
+- *Within one instance* -- the bot injects `ASK_USER_USER_ID` into the
+  subprocess environment per query (`mcpServersForUser()`), and the subprocess
+  resolves `query-context-{id}.json` before falling back to the shared file.
+  Per-query injection is sound because the SDK spawns stdio MCP servers per
+  `query()` call; verified against 0.3.233, including that two spawns with
+  different values do not leak into each other.
+
+The shared file is still written and still read as a fallback, so a bot paired
+with an older subprocess keeps working. In that pairing the race returns, which
+is why the fallback path logs the candidates it tried.
 
 ### Layer 24: Scripting Language Blocklist (SEC-F2)
 

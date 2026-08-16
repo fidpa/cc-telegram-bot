@@ -5,11 +5,7 @@
  * V1 supports full options (cwd, mcpServers, settingSources, etc.)
  */
 
-import {
-  query,
-  type Options,
-  type SDKMessage,
-} from "@anthropic-ai/claude-agent-sdk";
+import { query, type Options } from "@anthropic-ai/claude-agent-sdk";
 import { readFileSync, unlinkSync } from "fs";
 import type { Context } from "grammy";
 import {
@@ -19,10 +15,12 @@ import {
   CLAUDE_MODEL,
   COST_LIMIT_USD,
   DISALLOWED_TOOLS,
-  MCP_SERVERS,
+  mcpServersForUser,
   SAFETY_PROMPT,
   SESSION_FILE,
   STREAMING_THROTTLE_MS,
+  ASK_USER_DIR,
+  ASK_USER_TOOL_PREFIX,
   THINKING_DEEP_KEYWORDS,
   THINKING_KEYWORDS,
   VERBOSE_LEVEL,
@@ -79,21 +77,6 @@ function getThinkingOptions(
     case "off":
       return { thinking: { type: "disabled" } };
   }
-}
-
-/**
- * Extract text content from SDK message.
- */
-function getTextFromMessage(msg: SDKMessage): string | null {
-  if (msg.type !== "assistant") return null;
-
-  const textParts: string[] = [];
-  for (const block of msg.message.content) {
-    if (block.type === "text") {
-      textParts.push(block.text);
-    }
-  }
-  return textParts.length > 0 ? textParts.join("") : null;
 }
 
 /**
@@ -224,8 +207,7 @@ class ClaudeSession {
 
     // Write chat context to file for ask_user MCP subprocess (SEC-004)
     // SEC-F7: Per-user file prevents cross-user race condition
-    const homeDir = process.env.HOME || "/tmp";
-    const askUserDir = `${homeDir}/.cc-telegram-bot/ask-user`;
+    const askUserDir = ASK_USER_DIR;
     const contextFile = `${askUserDir}/query-context-${userId}.json`;
     // Also write generic file for backward compatibility with MCP server
     const genericContextFile = `${askUserDir}/query-context.json`;
@@ -265,7 +247,9 @@ class ClaudeSession {
       permissionMode: "bypassPermissions",
       allowDangerouslySkipPermissions: true,
       systemPrompt: SAFETY_PROMPT,
-      mcpServers: MCP_SERVERS,
+      // Per-user copy: the ask_user subprocess needs to know whose turn this
+      // is to read the right context file. See mcpServersForUser() in config.ts.
+      mcpServers: mcpServersForUser(userId),
       // Both spread conditionally rather than passed as empty arrays.
       //
       // `tools: []` is not "no restriction", it disables every built-in tool.
@@ -443,12 +427,12 @@ class ClaudeSession {
               // Level 0 drops the status line entirely; the BLOCKED/Access denied
               // messages above are NOT gated by the level — see VERBOSE_LEVEL in
               // config.ts for why.
-              if (verbose >= 1 && !toolName.startsWith("mcp__ask-user")) {
+              if (verbose >= 1 && !toolName.startsWith(ASK_USER_TOOL_PREFIX)) {
                 await statusCallback("tool", toolDisplay);
               }
 
               // Check for pending ask_user requests after ask-user MCP tool
-              if (toolName.startsWith("mcp__ask-user") && ctx && chatId) {
+              if (toolName.startsWith(ASK_USER_TOOL_PREFIX) && ctx && chatId) {
                 // Small delay to let MCP server write the file
                 await new Promise((resolve) => setTimeout(resolve, 200));
 

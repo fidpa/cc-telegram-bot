@@ -584,6 +584,77 @@ export const TEMP_DIR = `/tmp/${BOT_ID}`;
 // SEC-F6: Temp paths scoped to this instance's own directory (not all of /tmp/)
 export const TEMP_PATHS = [`${TEMP_DIR}/`, `/private${TEMP_DIR}/`];
 
+/**
+ * Handshake directory for the ask_user MCP subprocess: the bot writes the chat
+ * context here, the subprocess writes back the button request it picks up.
+ *
+ * Derived from BOT_ID like every other runtime path. It was hardcoded to
+ * ~/.cc-telegram-bot/ask-user in four places when BOT_ID was introduced in
+ * v1.2.3 — three under src/ plus ask_user_mcp/server.ts — which left exactly
+ * the collision BOT_ID exists to prevent: two instances shared this directory,
+ * and query-context.json in it is the one handshake file that is NOT per user.
+ * Instance A could answer with instance B's chat context.
+ *
+ * ask_user_mcp/server.ts computes the same path from BOT_ID rather than
+ * importing it from here. That duplication is deliberate: importing this
+ * module would run its startup validation, and index.ts strips
+ * TELEGRAM_BOT_TOKEN from the environment the subprocess inherits, so the
+ * import would exit(1) on a missing token. Keep the two in sync.
+ */
+export const ASK_USER_DIR = `${DATA_DIR}/ask-user`;
+
+/**
+ * Key of the ask_user server in mcp-config.ts, and the tool-name prefix the bot
+ * matches on. The prefix is derived from the key rather than written out a
+ * second time, so renaming the server cannot leave session.ts matching a name
+ * that no longer exists — the SDK builds MCP tool names as
+ * `mcp__<serverKey>__<toolName>`.
+ */
+export const ASK_USER_SERVER_KEY = "ask-user";
+export const ASK_USER_TOOL_PREFIX = `mcp__${ASK_USER_SERVER_KEY}`;
+
+/**
+ * Per-query copy of MCP_SERVERS that tells the ask_user subprocess which user
+ * this turn belongs to.
+ *
+ * The subprocess used to read the shared query-context.json, because it had no
+ * way to know. session.ts wrote a per-user file next to it and SECURITY.md
+ * called that a cross-user race fix, but nothing ever read it: with two
+ * authorized users active at once, whoever wrote the shared file last supplied
+ * the chat context for both, and a button could be delivered to the wrong chat.
+ *
+ * Injecting it as an environment variable works because the SDK spawns stdio
+ * MCP servers per query() call, so each spawn can carry a different value
+ * (verified against 0.3.233: two queries with different values produced spawns
+ * with matching values, no leakage between them).
+ *
+ * process.env is spread in first because supplying `env` replaces the
+ * inherited environment rather than extending it — without this the subprocess
+ * would lose BOT_ID and rebuild the wrong handshake path, which is the failure
+ * this whole area is about. index.ts has already stripped the secrets from
+ * process.env by the time this runs, so the spread does not widen what the
+ * subprocess can see.
+ */
+export function mcpServersForUser(
+  userId: number
+): Record<string, McpServerConfig> {
+  const entry = MCP_SERVERS[ASK_USER_SERVER_KEY];
+  if (!entry || !("command" in entry)) return MCP_SERVERS;
+
+  const inherited: Record<string, string> = {};
+  for (const [k, v] of Object.entries(process.env)) {
+    if (typeof v === "string") inherited[k] = v;
+  }
+
+  return {
+    ...MCP_SERVERS,
+    [ASK_USER_SERVER_KEY]: {
+      ...entry,
+      env: { ...inherited, ...(entry.env ?? {}), ASK_USER_USER_ID: String(userId) },
+    },
+  };
+}
+
 // Ensure directories exist with restricted permissions
 import { mkdirSync, chmodSync, existsSync } from "fs";
 try {

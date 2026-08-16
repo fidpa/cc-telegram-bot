@@ -300,12 +300,21 @@ function toolSpecMatches(spec: string, toolName: string): boolean {
  *     (see `forwardSubagentText`), and session.ts does not filter on
  *     parent_tool_use_id. Detection covers them; prevention still does not.
  *
- * Enforcement is `tools` / `disallowedTools` handed to the SDK — with the
- * caveat that `tools` is documented as the base set of *built-in* tools, so it
- * is not shown to constrain MCP tools. This function is the second pair of
- * eyes: it covers what the options may not, it survives the SDK renaming or
- * re-scoping them, and it makes a blocked call visible to the user instead of
- * leaving a turn that just stops.
+ * Enforcement is `tools` / `disallowedTools` handed to the SDK, and the two do
+ * not have the same reach (measured against 0.3.233, no longer inferred from
+ * the type definitions):
+ *
+ *   `tools`            built-in tools only. MCP tools stay available in full,
+ *                      so an allowlist alone does NOT yield a read-only bot
+ *                      once any MCP server is configured.
+ *   `disallowedTools`  reaches both. The exact name, `mcp__server__*` and
+ *                      `mcp__server` all remove the server's tools from the
+ *                      session itself, not just from this check.
+ *
+ * A read-only configuration therefore needs both lists. This function is the
+ * second pair of eyes: it catches what an allowlist leaves through, it survives
+ * the SDK renaming or re-scoping those options, and it makes a blocked call
+ * visible to the user instead of leaving a turn that just stops.
  */
 export function isToolAllowed(
   toolName: string

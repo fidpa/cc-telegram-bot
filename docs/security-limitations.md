@@ -169,6 +169,32 @@ crafted PDFs could exploit CVEs in the poppler library itself.
 **Mitigation:** Keep poppler updated (`brew upgrade poppler`). The 10MB file
 size limit reduces the attack surface.
 
+### 8. ask_user Handshake Context File (closed in v1.3.1)
+
+Kept here because it was documented as an accepted risk and readers need to see
+where it went, not because it is still open.
+
+**What it was:** the handshake directory is scoped to `BOT_ID`
+(`~/.<BOT_ID>/ask-user/`, mode 0o700) and the bot wrote the chat context to a
+per-user file, `query-context-{userId}.json` -- but `ask_user_mcp/server.ts` had
+no way to know which user it was serving, so it read the shared
+`query-context.json` and nothing ever read the per-user file. Two authorized
+users interacting at the same moment could race on the shared file: the second
+request overwrote it before the first subprocess read it, delivering one user's
+inline keyboard into the other's chat.
+
+**How it was closed:** the bot injects `ASK_USER_USER_ID` into the subprocess
+environment per query (`mcpServersForUser()` in `src/config.ts`), and the
+subprocess reads `query-context-{id}.json` first, falling back to the shared
+file only when no ID was injected. This works because the SDK spawns stdio MCP
+servers per `query()` call, so each spawn carries its own value -- verified
+against Agent SDK 0.3.233 with two queries carrying different values and no
+leakage between the spawns.
+
+**Verified:** with contexts for two users written in sequence, the old
+resolution path returned the second user's chat ID for both turns; the new one
+returns each user's own.
+
 ## Recommendations for High-Security Deployments
 
 If you need stronger security guarantees than this bot provides:

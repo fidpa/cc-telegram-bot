@@ -101,6 +101,7 @@ instances can coexist on one machine:
 - `~/.<BOT_ID>/sessions.json` -- Session persistence for `/resume`
 - `~/.<BOT_ID>/audit.log` -- Audit log (configurable via `AUDIT_LOG_PATH`)
 - `~/.<BOT_ID>/alerts.db` -- Alert history and per-user cost totals (configurable via `ALERT_DB_PATH`)
+- `~/.<BOT_ID>/ask-user/` -- Handshake files for the ask_user MCP subprocess (0o700). `ask_user_mcp/server.ts` derives this path from `BOT_ID` independently instead of importing `ASK_USER_DIR`, because importing `config.ts` would run its startup validation in a subprocess that no longer has `TELEGRAM_BOT_TOKEN`. Keep the two in sync
 - `/tmp/<BOT_ID>/` -- Downloaded photos/documents (cleaned up automatically)
 - `/run/<BOT_ID>/alerts.sock` -- Alert socket (configurable via `ALERT_SOCKET_PATH`)
 

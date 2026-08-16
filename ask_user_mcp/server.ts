@@ -16,6 +16,31 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 
+/**
+ * Handshake directory shared with the bot, derived from BOT_ID exactly as
+ * src/config.ts derives ASK_USER_DIR. Both must produce the same path or the
+ * button flow silently stops working: this process writes request files the
+ * bot never finds.
+ *
+ * Recomputed here instead of imported, because importing src/config.ts would
+ * run its startup validation — and src/index.ts strips TELEGRAM_BOT_TOKEN from
+ * the environment this subprocess inherits, so that import would exit(1).
+ */
+const HOME_DIR = process.env.HOME || "/tmp";
+const BOT_ID = (process.env.BOT_ID || "cc-telegram-bot").trim();
+const ASK_USER_DIR = `${HOME_DIR}/.${BOT_ID}/ask-user`;
+
+/**
+ * Telegram user this spawn belongs to, injected per query() by
+ * mcpServersForUser() in src/config.ts. Empty when the bot is older than
+ * v1.3.1 or when ask-user is not the server key it expects.
+ *
+ * Decides which context file to read. Without it the only choice was the
+ * shared query-context.json, which two simultaneous users overwrite for each
+ * other — the per-user file existed but nothing read it.
+ */
+const ASK_USER_USER_ID = (process.env.ASK_USER_USER_ID || "").trim();
+
 // Create the MCP server
 const server = new Server(
   {
@@ -80,23 +105,40 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   // Generate request ID and read chat context from file (SEC-004)
   const requestUuid = crypto.randomUUID().slice(0, 8);
-  const homeDir = process.env.HOME || "/tmp";
-  const contextFile = `${homeDir}/.cc-telegram-bot/ask-user/query-context.json`;
-
   const { readFileSync, mkdirSync, chmodSync } = await import("fs");
+
+  // Per-user file first, shared file only as the fallback for a bot that did
+  // not inject the ID. Reading the shared file when a per-user one is
+  // addressable is what delivered buttons to the wrong chat.
+  const contextCandidates = ASK_USER_USER_ID
+    ? [
+        `${ASK_USER_DIR}/query-context-${ASK_USER_USER_ID}.json`,
+        `${ASK_USER_DIR}/query-context.json`,
+      ]
+    : [`${ASK_USER_DIR}/query-context.json`];
 
   let chatId = "";
   let userId = "";
-  try {
-    const contextData = JSON.parse(readFileSync(contextFile, "utf-8"));
-    chatId = String(contextData.chat_id || "");
-    userId = String(contextData.user_id || "");
-  } catch (error) {
-    console.error("Failed to read query context file:", error);
+  let contextSource = "";
+  for (const candidate of contextCandidates) {
+    try {
+      const contextData = JSON.parse(readFileSync(candidate, "utf-8"));
+      chatId = String(contextData.chat_id || "");
+      userId = String(contextData.user_id || "");
+      contextSource = candidate;
+      break;
+    } catch {
+      // Try the next candidate; only report if none of them worked.
+    }
+  }
+  if (!contextSource) {
+    console.error(
+      `Failed to read query context, tried: ${contextCandidates.join(", ")}`
+    );
   }
 
   // Use restricted directory for request files (H3: security hardening)
-  const askUserDir = `${homeDir}/.cc-telegram-bot/ask-user`;
+  const askUserDir = ASK_USER_DIR;
   try {
     mkdirSync(askUserDir, { recursive: true });
     chmodSync(askUserDir, 0o700);

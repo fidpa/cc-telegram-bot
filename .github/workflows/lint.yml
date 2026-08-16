@@ -83,12 +83,19 @@ jobs:
       # Exempt: HOME/PATH are OS variables, OPENAI_API_KEY and
       # TYPEFULLY_API_KEY only appear on the env strip-list, ANTHROPIC_API_KEY
       # is read by the Agent SDK rather than by this code.
+      #
+      # ask_user_mcp/ is in scope since v1.3.1: the MCP subprocess reads BOT_ID
+      # to rebuild the handshake path, so it is env-dependent code the gate has
+      # to see. It was outside the glob when that dependency was introduced.
+      # ASK_USER_USER_ID is exempt: the bot injects it per query, it is not a
+      # setting an operator writes into .env, and documenting it there would
+      # invite exactly the manual override that breaks the handshake.
       - name: Environment variables in code vs .env.example
         run: |
           diff \
-            <(grep -ohE 'process\.env\.[A-Z_]{4,}' src/*.ts src/handlers/*.ts \
+            <(grep -ohE 'process\.env\.[A-Z_]{4,}' src/*.ts src/handlers/*.ts ask_user_mcp/*.ts \
                 | sed 's/.*env\.//' | sort -u \
-                | grep -vE '^(HOME|PATH|OPENAI_API_KEY|TYPEFULLY_API_KEY)$') \
+                | grep -vE '^(HOME|PATH|OPENAI_API_KEY|TYPEFULLY_API_KEY|ASK_USER_USER_ID)$') \
             <(grep -ohE "^#? ?[A-Z_]{4,}=" .env.example | tr -d '# =' | sort -u \
                 | grep -v '^ANTHROPIC_API_KEY$')
 

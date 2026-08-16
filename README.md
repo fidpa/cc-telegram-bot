@@ -187,11 +187,24 @@ prevention would need a `PreToolUse` hook, which the SDK itself recommends for
 this and which the bot does not install today (see
 [docs/security-limitations.md](docs/security-limitations.md)).
 
-The enforcing copy of the lists is the one handed to the SDK. Note that `tools`
-is documented as the base set of *built-in* tools, so it is not shown to
-constrain MCP tools -- for those, the runtime check is what notices. Listing
-`Task` in the denylist removes the sub-agent layer entirely and is the stronger
-setting where that is acceptable.
+The enforcing copy of the lists is the one handed to the SDK. The two lists do
+**not** have the same reach, which matters more than the naming suggests
+(measured against SDK 0.3.233):
+
+| | Built-in tools | MCP tools |
+|---|---|---|
+| `ALLOWED_TOOLS` (`tools`) | restricted | **not restricted** -- all remain |
+| `DISALLOWED_TOOLS` (`disallowedTools`) | restricted | restricted |
+
+So an allowlist alone does not make a read-only bot once any MCP server is
+configured: the built-ins shrink to the listed set while every MCP tool stays
+available. Only the denylist reaches those, and it accepts the exact name, the
+wildcard form (`mcp__server__*`) and the server name (`mcp__server`) -- all
+three remove the server's tools from the session itself, not merely from the
+bot's runtime check. For a read-only configuration, set both lists.
+
+Listing `Task` in the denylist removes the sub-agent layer entirely and is the
+stronger setting where that is acceptable.
 
 ### Credential Leak Prevention
 

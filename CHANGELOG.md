@@ -7,6 +7,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-08-16
+
+### Fixed
+- The ask_user subprocess read the shared `query-context.json` and never the per-user
+  `query-context-{userId}.json` the bot wrote beside it, because it had no way to know
+  which user it was serving. Two authorized users interacting at the same moment raced
+  on that file: the second request overwrote it before the first subprocess read it, and
+  the inline keyboard went to the wrong chat. The bot now injects `ASK_USER_USER_ID` per
+  query (`mcpServersForUser()`), which works because the SDK spawns stdio MCP servers per
+  `query()` call — verified against 0.3.233 that two spawns carry different values without
+  leaking. The subprocess prefers the per-user file and falls back to the shared one, so
+  an older subprocess keeps working. Measured before and after: with two users' contexts
+  written in sequence the old path returned the second user's chat ID for both turns, the
+  new one returns each user's own
+- The ask_user handshake directory was still hardcoded to `~/.cc-telegram-bot/ask-user`
+  in four places (`src/session.ts`, `src/handlers/streaming.ts`, `src/handlers/callback.ts`,
+  `ask_user_mcp/server.ts`), so `BOT_ID` from 1.2.3 did not reach it. Two instances shared
+  the directory — and `query-context.json` in it is the one handshake file that is not
+  per user, so instance A could answer a button press with instance B's chat context.
+  Now derived from `BOT_ID` via the new `ASK_USER_DIR` export
+- `SECURITY.md` Layer 23 asserted that ask-user context files "are scoped per user to
+  prevent cross-user race conditions" for a version in which nothing read the per-user
+  file. The layer had described the intent as though it were the behaviour. It now
+  describes both halves of the handshake and names the residual: a bot paired with an
+  older subprocess still falls back to the shared file. Recorded in
+  `docs/security-limitations.md` as limitation 8, kept in the list as closed rather than
+  deleted, so a reader who met it as an accepted risk can see where it went
+- `src/security.ts` still carried the pre-measurement hedge that `tools` "is not shown to
+  constrain MCP tools". It is now measured and stated as fact, with the reach of both
+  lists spelled out, matching the table added to `README.md`
+- The `ASK_USER_DIR` comment in `src/config.ts` said the path had been hardcoded in
+  "three places"; it was four, as the changelog entry above already enumerated. Three
+  under `src/` plus the MCP subprocess
+- `AGENTS.md` lists `~/.<BOT_ID>/ask-user/` among the runtime paths. The section claims
+  that all runtime paths derive from `BOT_ID`, and this one was missing from it
+- Removed `getTextFromMessage()` from `src/session.ts`. It was defined and called from
+  nowhere, and its removal took the orphaned `SDKMessage` import with it. Without this the
+  file would have crossed the 800-line limit in `CONTRIBUTING.md` at 801
+- `ASK_USER_SERVER_KEY` documented itself as the source the `mcp__ask-user__*` tool names
+  are derived from, "so the two cannot drift apart", while `session.ts` matched on the
+  string literal and could drift apart freely. The prefix is now derived from the key
+  (`ASK_USER_TOOL_PREFIX`) and the literals are gone, which makes the existing claim true
+  instead of softening it. Same resolved value, no behaviour change
+
+### Changed
+- The CI configuration-documentation gate now also scans `ask_user_mcp/*.ts`. It covered
+  only `src/`, so the subprocess reading `BOT_ID` — introduced by this same release — would
+  have gone undocumented without anything noticing. `ASK_USER_USER_ID` is exempt from the
+  gate: the bot injects it per query, and documenting it in `.env.example` would invite the
+  manual override that breaks the handshake
+- Tool control documentation corrected after measuring against SDK 0.3.233. `ALLOWED_TOOLS`
+  (`tools`) governs built-in tools only: with `ALLOWED_TOOLS=Read,Grep,Glob` the built-ins
+  reduce to those three while every tool of every configured MCP server remains available.
+  An allowlist alone therefore does not produce a read-only bot once an MCP server is
+  configured — both lists are needed
+- `DISALLOWED_TOOLS` (`disallowedTools`) does reach MCP tools, and the earlier caveat that
+  the wildcard and server-level forms might be honoured only by the bot's own runtime check
+  was too cautious. Both `mcp__server` and `mcp__server__*` remove the server's entire tool
+  set from the session itself
+
 ## [1.3.0] - 2026-08-16
 
 ### Added
@@ -256,7 +316,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [linuz90/claude-telegram-bot](https://github.com/linuz90/claude-telegram-bot) (MIT License)
 - Core architecture: grammY Telegram bot, Claude Agent SDK integration, streaming responses, multi-modal input (text, voice, photo, document, video), MCP support
 
-[Unreleased]: https://github.com/fidpa/cc-telegram-bot/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/fidpa/cc-telegram-bot/compare/v1.3.1...HEAD
+[1.3.1]: https://github.com/fidpa/cc-telegram-bot/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/fidpa/cc-telegram-bot/compare/v1.2.3...v1.3.0
 [1.2.3]: https://github.com/fidpa/cc-telegram-bot/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/fidpa/cc-telegram-bot/compare/v1.2.1...v1.2.2

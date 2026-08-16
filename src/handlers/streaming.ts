@@ -11,6 +11,7 @@ import type { StatusCallback } from "../types";
 import { convertMarkdownToHtml, escapeHtml } from "../formatting";
 import { redactSecrets } from "../utils";
 import {
+  ASK_USER_DIR,
   TELEGRAM_MESSAGE_LIMIT,
   TELEGRAM_SAFE_LIMIT,
   STREAMING_THROTTLE_MS,
@@ -46,8 +47,7 @@ export async function checkPendingAskUserRequests(
   chatId: number
 ): Promise<boolean> {
   const glob = new Bun.Glob("ask-user-*.json");
-  const homeDir = process.env.HOME || "/tmp";
-  const askUserDir = `${homeDir}/.cc-telegram-bot/ask-user`;
+  const askUserDir = ASK_USER_DIR;
   let buttonsSent = false;
 
   for await (const filename of glob.scan({ cwd: askUserDir, absolute: false })) {
