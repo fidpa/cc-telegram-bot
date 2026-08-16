@@ -54,10 +54,13 @@ This is intentional. The bot is designed for personal use from mobile, where con
 among the 24 layers -- the count describes what protects an operator who changed
 nothing. Deployments that do not need write access (a bot pointed at a
 documentation repository, for example) should set them; see the Tool Control
-section in `README.md`. Note that the bot's own runtime check of those lists
-reports blocked calls but does not prevent execution -- it sees them only after
-dispatch, sub-agent calls included. The SDK options are what enforce; a
-`PreToolUse` hook would be the way to prevent, and is not installed today.
+section in `README.md`. Those lists are enforced twice over: the SDK options
+remove the tools from the session, and a `PreToolUse` hook (`buildSafetyHook()`
+in `security.ts`) denies any call that still gets attempted, before it runs. The
+same hook is what now prevents command-blocklist and path-validation violations
+rather than merely reporting them. The check in the response stream is reporting
+only -- by the time a `tool_use` block is visible there the call has already
+been dispatched.
 
 **This is not configurable** -- the bot always runs in bypass mode. If you need permission prompts, use Claude Code directly instead.
 

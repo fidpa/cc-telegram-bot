@@ -408,6 +408,73 @@ export function checkToolCallSafety(
   return [true, ""];
 }
 
+/**
+ * Refuse an unsafe tool call BEFORE it runs, and let the turn continue.
+ *
+ * This is the prevention half that the stream check in session.ts cannot be.
+ * By the time a tool_use block appears in the output stream the call has
+ * already been dispatched, so the only enforcement left there is to abort the
+ * whole turn — which is what used to happen: the user asked a question, some
+ * tool call tripped a rule, and the answer never arrived. Nothing about that
+ * was a security failure; it was the model taking a route it was not allowed
+ * to take, and the bot treating that as fatal.
+ *
+ * A PreToolUse hook is the SDK's own answer, documented in sdk.d.ts, and it
+ * behaves the way Claude Code does interactively: the call is denied, the
+ * reason goes back to the model as a tool result, and the model picks a
+ * different route. `permissionDecision: "deny"` resolves before canUseTool
+ * runs, so `permissionMode: "bypassPermissions"` does not override it. The
+ * hook also fires inside sub-agents (HookInput.agent_id).
+ *
+ * This is the ONLY thing standing between an unsafe call and execution, so it
+ * fails closed: anything thrown inside the callback still denies. The stream
+ * check in session.ts cannot serve as a fallback, however tempting that reads
+ * — measured against SDK 0.3.233, the tool_use block reaches the output stream
+ * BEFORE the hook runs, so a stream-side check firing first would abort the
+ * query before the hook ever gets a say. That ordering is exactly what used to
+ * make a blocked call kill the whole turn. The stream check therefore only
+ * reports now, and prevention lives here alone.
+ */
+export function buildSafetyHook() {
+  return [
+    {
+      hooks: [
+        async (
+          input: { hook_event_name: string } & Record<string, unknown>
+        ) => {
+          if (input.hook_event_name !== "PreToolUse") return { continue: true };
+
+          let notice: string;
+          try {
+            const toolName = String(input.tool_name || "");
+            const toolInput = (input.tool_input || {}) as Record<
+              string,
+              unknown
+            >;
+            const [safe, reason] = checkToolCallSafety(toolName, toolInput);
+            if (safe) return { continue: true };
+            notice = reason;
+          } catch (e) {
+            notice = `Safety check failed: ${(e as Error).message}`;
+          }
+
+          // continue: true keeps the turn alive. Only the call dies — the
+          // reason goes back to the model as a tool result, and it picks
+          // another route instead of the user losing the answer.
+          return {
+            continue: true,
+            hookSpecificOutput: {
+              hookEventName: "PreToolUse" as const,
+              permissionDecision: "deny" as const,
+              permissionDecisionReason: notice,
+            },
+          };
+        },
+      ],
+    },
+  ];
+}
+
 // ============== Authorization ==============
 
 export function isAuthorized(

@@ -98,33 +98,37 @@ cannot access it via `printenv` or `$TELEGRAM_BOT_TOKEN`. Output redaction
 
 ### 4. Sub-Agents Inherit Bypass Permissions (Audit: not numbered)
 
-**What we do:** Nothing -- this is SDK behavior.
+**Status: closed as of 1.3.3.** Kept in the list rather than deleted, so a
+reader who met this as an accepted risk can see where it went.
 
-**What we don't do:** Prevent sub-agent tool calls before they execute.
+**What we do:** A `PreToolUse` hook (`buildSafetyHook()` in `security.ts`) runs
+`checkToolCallSafety()` before every tool call and denies the unsafe ones. It
+fires inside sub-agents as well, so the command blocklist, path validation and
+the tool allow/deny lists now apply one level down and are prevented rather than
+merely reported.
 
-**Why:** The Claude Agent SDK's `Task` tool spawns sub-agents that inherit the
-parent's `permissionMode: "bypassPermissions"` setting.
+**Why a hook and not `canUseTool`:** Under `permissionMode:
+"bypassPermissions"` every tool call is auto-approved before `canUseTool` is
+consulted, so that callback never sees them. `permissionDecision: "deny"` from a
+`PreToolUse` hook resolves earlier and is not overridden by the bypass. The SDK
+documents `PreToolUse` as the way to gate under bypass.
 
-**Correction (Agent SDK 0.3.233):** This section previously stated that "there is
-no SDK-level hook to intercept sub-agent tool calls". That is not true of the
-installed SDK, and the claim has been removed rather than carried forward:
+**Correction (Agent SDK 0.3.233):** This section once stated that "there is no
+SDK-level hook to intercept sub-agent tool calls". That was never true of the
+installed SDK; `HookInput.agent_id` exists precisely to tell parent and
+sub-agent calls apart.
 
-- A `PreToolUse` hook fires before execution and also fires inside sub-agents --
-  `HookInput.agent_id` exists precisely to tell the two apart. The bot does not
-  install such a hook today; doing so is the way to get real prevention without
-  giving up `bypassPermissions`.
-- `canUseTool` is *not* an option here. The SDK states that under
-  `bypassPermissions` every tool call is auto-approved before that callback is
-  consulted, and points to `PreToolUse` instead.
-- Sub-agent tool calls **are** visible to the bot's own runtime check. The SDK
-  emits `tool_use`/`tool_result` blocks from sub-agents by default (see the
-  `forwardSubagentText` option), and `session.ts` does not filter them out. So
-  `ALLOWED_TOOLS`/`DISALLOWED_TOOLS` violations one level down are detected and
-  reported -- they are simply not prevented, exactly as on the main thread.
+**Ordering, measured:** the `tool_use` block reaches the output stream *before*
+the hook fires. The stream-side check in `session.ts` therefore cannot act as a
+fallback -- it never runs second -- and it no longer aborts the turn. It reports
+the refusal to the user and nothing more. Prevention lives in the hook alone,
+which is why the hook fails closed: anything thrown inside it still denies.
 
-**Accepted risk:** A sub-agent has the same unrestricted access as its parent,
-and detection happens after dispatch. Listing `Task` in `DISALLOWED_TOOLS`
-removes that layer entirely and is the stronger setting where it is acceptable.
+**Residual risk:** A sub-agent still inherits the parent's unrestricted access
+for everything the checks do not cover -- the blocklist is string matching, and
+tools other than `Bash`/`Read`/`Write`/`Edit`/`Glob`/`Grep` are only subject to
+the allow/deny lists. Listing `Task` in `DISALLOWED_TOOLS` removes the sub-agent
+layer entirely and remains the stronger setting where that is acceptable.
 
 ### 5. Data Exfiltration via Web Tools (Audit: not numbered)
 

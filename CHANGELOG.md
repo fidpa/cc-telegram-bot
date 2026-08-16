@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-08-17
+
+### Security
+- Unsafe tool calls are now **prevented**, not merely reported. A `PreToolUse`
+  hook (`buildSafetyHook()` in `src/security.ts`) runs `checkToolCallSafety()` before
+  the call executes and denies it with `permissionDecision: "deny"`, which resolves
+  before `canUseTool` and is therefore not overridden by
+  `permissionMode: "bypassPermissions"`. This covers the command blocklist (Layers
+  5/6), file and search path validation (Layer 7) and the `ALLOWED_TOOLS` /
+  `DISALLOWED_TOOLS` lists, and it fires inside sub-agents as well
+  (`HookInput.agent_id`). 1.3.0 named this as the missing piece and deferred it as
+  its own change; this is that change. The hook fails closed: anything thrown inside
+  the callback still denies
+- The layer count stays at 24. Nothing new is defended here -- the same four checks
+  now act where they previously only observed -- and inventing a Layer 25 for a
+  relocated enforcement point would overstate what changed. `docs/SECURITY_AUDIT_REPORT.md`
+  is a dated document and is left untouched
+
+### Fixed
+- A blocked tool call no longer costs the user the whole answer. The stream check
+  threw, which aborted the query: the user asked a question, the model reached for
+  a route it was not allowed to take, and no answer ever arrived -- with only the
+  generic error to show for it. The denial now goes back to the model as a tool
+  result and it picks another route. The stream check reports and continues.
+  Measured against SDK 0.3.233, the `tool_use` block reaches the output stream
+  *before* the hook fires, so the stream check cannot serve as a fallback and must
+  not throw; prevention lives in the hook alone
+- `package.json` still read `1.3.1` after the 1.3.2 release, and `CHANGELOG.md` had
+  no `[1.3.2]` section -- its entries were left under `[Unreleased]`. The release run
+  had stopped after the tag. The section has been written from the 1.3.2 commit and
+  the version now reads `1.3.3`. The `v1.3.2` tag itself was never pushed and is
+  published unchanged rather than moved; the `package.json` it carries still says
+  `1.3.1`, which cannot be corrected without rewriting history. Same failure mode as
+  the drift that 1.2.0 had to clean up
+- Three documents asserted that tool-call checking "reports, it does not prevent"
+  and that no hook was installed: `README.md` (Tool Control), `SECURITY.md` (bypass
+  mode) and `docs/security-limitations.md` (limitation 4, now marked closed and kept
+  in the list rather than deleted, as limitation 8 was in 1.3.1)
+- `src/session.ts` had grown to 806 lines, past the 800-line limit in
+  `CONTRIBUTING.md`, because the new comment block duplicated the one it replaced.
+  Condensed to 797
+- Size claim in `README.md` and `AGENTS.md` corrected from "~6,800 lines TypeScript"
+  to ~7,000; measured across `src/` and `ask_user_mcp/`: 7,052
+
+## [1.3.2] - 2026-08-16
+
 ### Added
 - `THINKING_DEFAULT` (`off` by default = previous behaviour). Baseline thinking level for
   every message, applied before keywords. Until now the only way to get reasoning effort
@@ -347,7 +393,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [linuz90/claude-telegram-bot](https://github.com/linuz90/claude-telegram-bot) (MIT License)
 - Core architecture: grammY Telegram bot, Claude Agent SDK integration, streaming responses, multi-modal input (text, voice, photo, document, video), MCP support
 
-[Unreleased]: https://github.com/fidpa/cc-telegram-bot/compare/v1.3.1...HEAD
+[Unreleased]: https://github.com/fidpa/cc-telegram-bot/compare/v1.3.3...HEAD
+[1.3.3]: https://github.com/fidpa/cc-telegram-bot/compare/v1.3.2...v1.3.3
+[1.3.2]: https://github.com/fidpa/cc-telegram-bot/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/fidpa/cc-telegram-bot/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/fidpa/cc-telegram-bot/compare/v1.2.3...v1.3.0
 [1.2.3]: https://github.com/fidpa/cc-telegram-bot/compare/v1.2.2...v1.2.3

@@ -180,13 +180,14 @@ permission prompts, and under `bypassPermissions` everything is auto-approved
 anyway, so an allowlist there would look like a restriction and enforce
 nothing.
 
-The bot additionally checks every tool call it sees in the response stream
-against both lists. **That check reports, it does not prevent** -- by the time a
-tool call is visible in the stream it has already been dispatched. It does cover
-sub-agent calls, since the SDK emits their tool blocks by default. Real
-prevention would need a `PreToolUse` hook, which the SDK itself recommends for
-this and which the bot does not install today (see
-[docs/security-limitations.md](docs/security-limitations.md)).
+The bot additionally checks every tool call against both lists in a `PreToolUse`
+hook, which the SDK itself recommends for gating under `bypassPermissions`.
+**That check prevents**: the call is denied before it runs, the reason goes back
+to the model as a tool result, and the model picks another route -- the turn
+continues instead of dying. It covers sub-agent calls too, since the hook fires
+inside them as well. The same check still runs over the response stream, but
+there it only reports, because a `tool_use` block is visible only after dispatch
+(see [docs/security-limitations.md](docs/security-limitations.md)).
 
 The enforcing copy of the lists is the one handed to the SDK. The two lists do
 **not** have the same reach, which matters more than the naming suggests
@@ -515,4 +516,4 @@ Marc Allgeier ([@fidpa](https://github.com/fidpa))
 
 ---
 
-**Production-tested since January 2026** | 24 security layers | ~6,800 lines TypeScript | ~2,000 lines documentation
+**Production-tested since January 2026** | 24 security layers | ~7,000 lines TypeScript | ~2,000 lines documentation

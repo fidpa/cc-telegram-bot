@@ -30,7 +30,11 @@ import {
 import { addUserCost, CostLimitError, getUserCost } from "./cost";
 import { formatToolStatus } from "./formatting";
 import { checkPendingAskUserRequests } from "./handlers/streaming";
-import { checkToolCallSafety, stripToolWildcards } from "./security";
+import {
+  buildSafetyHook,
+  checkToolCallSafety,
+  stripToolWildcards,
+} from "./security";
 import type {
   SavedSession,
   SessionHistory,
@@ -246,6 +250,7 @@ class ClaudeSession {
 
     // Build SDK V1 options - supports all features
     const options: Options = {
+      hooks: { PreToolUse: buildSafetyHook() },
       model: this.preferredModel || CLAUDE_MODEL,
       cwd: WORKING_DIR,
       settingSources: ["user", "project"],
@@ -386,21 +391,26 @@ class ClaudeSession {
               const toolName = block.name;
               const toolInput = block.input as Record<string, unknown>;
 
-              // Command blocklist, path validation and the tool allow/deny
-              // lists — see checkToolCallSafety() in security.ts.
+              // REPORTING ONLY. Prevention is the PreToolUse hook's job — see
+              // buildSafetyHook() in security.ts, which denies the call before
+              // it runs and hands the reason back to the model.
               //
-              // Reported through "notice", never "tool": tool messages are
-              // deleted on "done" and again by the catch blocks in text.ts and
-              // media-group.ts, so the user used to see only the generic error
-              // and never the reason. A refusal is not a progress update, and
-              // it is reported at every VERBOSE_LEVEL including 0.
+              // This must not throw, and that is an ordering fact rather than a
+              // preference: measured against SDK 0.3.233 the tool_use block
+              // arrives in this stream BEFORE the hook fires. Throwing here
+              // would abort the query while the hook is still pending, which is
+              // exactly the old behaviour where one blocked call cost the user
+              // the whole answer. For the same reason it cannot serve as a
+              // fallback — it never runs second.
               //
-              // This reads the output stream, so it reports and ends the turn
-              // rather than preventing the call — by the time a tool_use block
-              // appears here the call has already been dispatched. Sub-agent
-              // calls DO reach this point (the SDK emits their tool_use blocks
-              // by default and nothing here filters on parent_tool_use_id);
-              // what is missing is prevention, not visibility.
+              // What it is good for is telling the user why the model changed
+              // course. Reported through "notice", never "tool": tool messages
+              // are deleted on "done" and again by the catch blocks in text.ts
+              // and media-group.ts, so a refusal sent as "tool" would vanish. A
+              // refusal is not a progress update, and it is shown at every
+              // VERBOSE_LEVEL including 0. Sub-agent calls reach this point too
+              // (the SDK emits their tool_use blocks and nothing here filters
+              // on parent_tool_use_id).
               const [toolSafe, toolNotice] = checkToolCallSafety(
                 toolName,
                 toolInput
@@ -408,7 +418,7 @@ class ClaudeSession {
               if (!toolSafe) {
                 console.warn(`BLOCKED: ${toolNotice}`);
                 await statusCallback("notice", toolNotice);
-                throw new Error(`Tool call blocked: ${toolNotice}`);
+                continue;
               }
 
               // Segment ends when tool starts

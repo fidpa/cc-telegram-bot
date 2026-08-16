@@ -13,7 +13,7 @@ bun install        # Install dependencies
 
 ## Architecture
 
-This is a Telegram bot (~6,800 lines TypeScript) that lets you control Claude Code from your phone via text, voice, photos, and documents. Built with Bun and grammY.
+This is a Telegram bot (~7,000 lines TypeScript) that lets you control Claude Code from your phone via text, voice, photos, and documents. Built with Bun and grammY.
 
 ### Message Flow
 
@@ -27,7 +27,7 @@ Alert socket -> Zod validation -> Secret check -> Rate limit -> Alert queue -> C
 - **`src/index.ts`** -- Entry point, registers handlers, starts polling, environment isolation (Layer 16)
 - **`src/config.ts`** -- Environment parsing, MCP loading, safety prompts, blocked command patterns
 - **`src/session.ts`** -- `ClaudeSession` class wrapping Agent SDK with streaming, session persistence, and defense-in-depth safety checks (path validation and tool allow/deny checks on tool calls)
-- **`src/security.ts`** -- `RateLimiter` (token bucket), `isPathAllowed()`, `checkCommandSafety()` (regex patterns), `isToolAllowed()`, `stripToolWildcards()`, `isAuthorized()`
+- **`src/security.ts`** -- `RateLimiter` (token bucket), `isPathAllowed()`, `checkCommandSafety()` (regex patterns), `isToolAllowed()`, `stripToolWildcards()`, `checkToolCallSafety()`, `buildSafetyHook()` (`PreToolUse` denial), `isAuthorized()`
 - **`src/alert-socket.ts`** -- Unix socket listener for system alerts, alert prompts, EOD report generation
 - **`src/alert-db.ts`** -- SQLite store (`bun:sqlite`, WAL mode, prepared statements, 0o600): alert history, plus the connection shared with `cost.ts`
 - **`src/cost.ts`** -- Per-user cost accounting (`user_costs` table keyed by user and `YYYY-MM` period), `CostLimitError`
