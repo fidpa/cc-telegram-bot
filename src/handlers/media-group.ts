@@ -9,6 +9,7 @@ import type { Context } from "grammy";
 import type { Message } from "grammy/types";
 import type { PendingMediaGroup } from "../types";
 import { MEDIA_GROUP_TIMEOUT } from "../config";
+import { CostLimitError } from "../cost";
 import { rateLimiter } from "../security";
 import { auditLogRateLimit } from "../utils";
 import { getSession } from "../session";
@@ -189,6 +190,13 @@ export async function handleProcessingError(
     } catch (cleanupError) {
       console.debug("Failed to delete tool message:", cleanupError);
     }
+  }
+
+  // The cost limit already stated its reason through the notice channel;
+  // replacing it with the generic message below would lose the amount, the
+  // ceiling and the reset date.
+  if (error instanceof CostLimitError) {
+    return;
   }
 
   // Send error message

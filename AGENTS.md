@@ -13,7 +13,7 @@ bun install        # Install dependencies
 
 ## Architecture
 
-This is a Telegram bot (~5,900 lines TypeScript) that lets you control Claude Code from your phone via text, voice, photos, and documents. Built with Bun and grammY.
+This is a Telegram bot (~6,800 lines TypeScript) that lets you control Claude Code from your phone via text, voice, photos, and documents. Built with Bun and grammY.
 
 ### Message Flow
 
@@ -26,10 +26,11 @@ Alert socket -> Zod validation -> Secret check -> Rate limit -> Alert queue -> C
 
 - **`src/index.ts`** -- Entry point, registers handlers, starts polling, environment isolation (Layer 16)
 - **`src/config.ts`** -- Environment parsing, MCP loading, safety prompts, blocked command patterns
-- **`src/session.ts`** -- `ClaudeSession` class wrapping Agent SDK with streaming, session persistence, and defense-in-depth safety checks (path validation on tool calls)
-- **`src/security.ts`** -- `RateLimiter` (token bucket), `isPathAllowed()`, `checkCommandSafety()` (regex patterns), `isAuthorized()`
+- **`src/session.ts`** -- `ClaudeSession` class wrapping Agent SDK with streaming, session persistence, and defense-in-depth safety checks (path validation and tool allow/deny checks on tool calls)
+- **`src/security.ts`** -- `RateLimiter` (token bucket), `isPathAllowed()`, `checkCommandSafety()` (regex patterns), `isToolAllowed()`, `stripToolWildcards()`, `isAuthorized()`
 - **`src/alert-socket.ts`** -- Unix socket listener for system alerts, alert prompts, EOD report generation
-- **`src/alert-db.ts`** -- SQLite alert history store (`bun:sqlite`, WAL mode, prepared statements, 0o600)
+- **`src/alert-db.ts`** -- SQLite store (`bun:sqlite`, WAL mode, prepared statements, 0o600): alert history, plus the connection shared with `cost.ts`
+- **`src/cost.ts`** -- Per-user cost accounting (`user_costs` table keyed by user and `YYYY-MM` period), `CostLimitError`
 - **`src/formatting.ts`** -- Markdown to HTML conversion for Telegram, tool status formatting
 - **`src/utils.ts`** -- Audit logging (HMAC-SHA256), voice transcription (local whisper-cli), typing indicators, output redaction, log sanitization (console wrapper)
 - **`src/types.ts`** -- Shared TypeScript types
@@ -37,7 +38,7 @@ Alert socket -> Zod validation -> Secret check -> Rate limit -> Alert queue -> C
 ### Handlers (`src/handlers/`)
 
 Each message type has a dedicated async handler:
-- **`commands.ts`** -- `/start`, `/new`, `/stop`, `/status`, `/resume`, `/restart`, `/retry`, `/model` (`/m`), `/alert`
+- **`commands.ts`** -- `/start`, `/new`, `/stop`, `/status`, `/resume`, `/restart`, `/retry`, `/model` (`/m`), `/verbose`, `/alert`
 - **`text.ts`** -- Text messages with input length validation
 - **`voice.ts`** -- Voice to text via local whisper-cli, then same flow as text
 - **`audio.ts`** -- Audio file transcription via local whisper-cli (mp3, m4a, ogg, wav, etc.)
@@ -82,6 +83,9 @@ All config via `.env` (copy from `.env.example`). Key variables:
 - `TELEGRAM_ALLOWED_GROUPS` -- Whitelisted group IDs for group chat support
 - `CLAUDE_WORKING_DIR` -- Working directory for Claude
 - `ALLOWED_PATHS` -- Directories Claude can access
+- `ALLOWED_TOOLS`, `DISALLOWED_TOOLS` -- Tool allow/deny lists (both empty by default; see the Tool Control section in `README.md`)
+- `COST_LIMIT_USD` -- Cumulative USD ceiling per user and calendar month (unset = unlimited)
+- `VERBOSE_LEVEL` -- Streaming verbosity `0`/`1`/`2` (default `1`); per-user override via `/verbose`
 - `ALERT_SOCKET_PATH`, `ALERT_SOCKET_SECRET` -- Alert socket configuration
 - `DOCS_DIR` -- Directory scanned for existing documentation during alert handling
 - `WHISPER_MODE` -- Voice transcription mode (`local` or `off`)
@@ -96,7 +100,7 @@ instances can coexist on one machine:
 
 - `~/.<BOT_ID>/sessions.json` -- Session persistence for `/resume`
 - `~/.<BOT_ID>/audit.log` -- Audit log (configurable via `AUDIT_LOG_PATH`)
-- `~/.<BOT_ID>/alerts.db` -- Alert history (configurable via `ALERT_DB_PATH`)
+- `~/.<BOT_ID>/alerts.db` -- Alert history and per-user cost totals (configurable via `ALERT_DB_PATH`)
 - `/tmp/<BOT_ID>/` -- Downloaded photos/documents (cleaned up automatically)
 - `/run/<BOT_ID>/alerts.sock` -- Alert socket (configurable via `ALERT_SOCKET_PATH`)
 

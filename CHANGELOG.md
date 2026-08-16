@@ -7,6 +7,94 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-08-16
+
+### Added
+- `ALLOWED_TOOLS` and `DISALLOWED_TOOLS` (both empty by default). Until now the bot
+  passed no tool restriction to the Agent SDK at all while running with
+  `permissionMode: "bypassPermissions"`: `ALLOWED_PATHS` bounded where Claude could
+  work, nothing bounded what it could do there, so a fork pointed at a documentation
+  repository had no way to make it read-only. The lists are handed to the SDK as `tools`
+  and `disallowedTools`. The similarly named `allowedTools` option is deliberately not
+  used -- it is an auto-approve list for permission prompts and enforces nothing under
+  `bypassPermissions`. Leaving both unset keeps the previous behaviour exactly
+- `COST_LIMIT_USD` (unset by default = unlimited). Cumulative spend per Telegram user
+  and calendar month, persisted in the existing SQLite database (`ALERT_DB_PATH`, new
+  `user_costs` table) so it survives restarts. `sessions.json` was the other candidate
+  and lost on one point: `loadSessionHistory()` swallows parse errors and returns an
+  empty history, so a corrupted file would have silently reset the budget to zero.
+  The period (`YYYY-MM`, local time) is part of the primary key, so the monthly reset
+  needs no scheduled job that could fail to run. Exceeding the limit produces an
+  explicit message naming the amount, the ceiling and the reset, not a silent refusal
+- `VERBOSE_LEVEL` (default `1` = previous behaviour) and a `/verbose` command. The bot
+  streamed every tool call and every reasoning fragment unconditionally, which is the
+  point for system administration and a wall of noise for anything else. `0` shows the
+  final answer only, `1` keeps thinking previews and tool status, `2` adds tool results
+  and a closing line with duration, tokens and cost. The per-user override is held in
+  memory on the session exactly like the `/model` override: it survives `/new`, is lost
+  on restart, and then falls back to the environment default
+- Cumulative monthly cost is shown in `/status`, with the ceiling and percentage when
+  one is configured. Shown regardless of whether a limit is set, because picking a
+  sensible ceiling requires seeing the number first
+
+### Changed
+- Blocked tool calls, blocked commands and denied paths are now reported through a new
+  `notice` status type instead of the ephemeral `tool` type. Refusals were pushed onto
+  the same message list that is deleted when a turn ends, and deleted again by the error
+  handlers in `text.ts`/`media-group.ts`, so the user saw only the generic error and
+  never the reason. On the alert path they were not delivered at all, because
+  `createAlertStatusCallback` implements `tool`/`segment_end`/`done` and nothing else
+- Those refusal messages are reported at every verbose level, including `0`. They look
+  like status updates but are the only explanation a user gets for a refused request;
+  gating them would have turned a noise setting into a security setting and quietly
+  undone the tool control above
+- `/alert` now bills the person who typed it, not the alert session. The alert session
+  (synthetic user ID 0) is exempt from the cost ceiling on purpose, because a budget
+  must never be able to silence system monitoring, and without this attribution a user
+  who had hit their limit could have kept working through `/alert` on that exemption
+- Tool-call safety checks moved from `session.ts` into `checkToolCallSafety()` in
+  `security.ts`. Adding three features to `sendMessageStreaming()` had pushed
+  `session.ts` past the 800-line limit in `CONTRIBUTING.md`; the checks are questions
+  about safety and belong in that module. No behaviour change
+- `README.md` is titled "Claude Code Telegram Bot" instead of the repository slug
+  `cc-telegram-bot`, which said what the directory is called rather than what the
+  project does
+
+### Fixed
+- `README.md` and `AGENTS.md` claimed "~5,900 lines TypeScript". Measured across `src/`
+  and `ask_user_mcp/`: 6,838. The figure had been drifting since before v1.2.0
+
+### Security
+- `docs/security-limitations.md` and `SECURITY.md` corrected: restricting tool usage was
+  documented as "not implemented" and as something to do "via the system prompt". Both
+  are now env-configurable and SDK-enforced
+- `docs/security-limitations.md` claimed "there is no SDK-level hook to intercept
+  sub-agent tool calls". That is not true of Agent SDK 0.3.233 and the claim has been
+  removed rather than carried forward: a `PreToolUse` hook fires before execution and
+  inside sub-agents (`HookInput.agent_id` exists to tell them apart), and it is what the
+  SDK recommends for gating under `bypassPermissions`, while `canUseTool` is
+  auto-approved past and never consulted. No hook is installed here; that reworks the
+  permission path and belongs in its own change. What the bot's runtime check does and
+  does not do is now stated precisely: it detects after dispatch, sub-agent calls
+  included, and never prevents
+- Known holes in cost accounting, stated plainly rather than buried: automatic socket
+  alerts are exempt from the ceiling by design (see above); `total_cost_usd` is only
+  emitted on the result event, so the four paths that leave the stream earlier (the
+  inline-keyboard hand-off, `/stop`, a `!` interrupt, and a tool call blocked by the
+  checks) consume real tokens and book zero; and because the ceiling is checked before
+  a turn rather than during it, a single turn can exceed it by any amount. The SDK's
+  `maxBudgetUsd` would close the latter two, but needs its own handling of the
+  `error_max_budget_usd` result subtype and is therefore left to a separate change
+- `user_costs` is created with `CREATE TABLE IF NOT EXISTS` and there is no migration
+  mechanism, matching the existing `alerts` table. Adding a column later will not happen
+  by itself on databases that already exist. Reverting leaves the table in place, which
+  is harmless, because older code never reads it
+- Tool control is intentionally **not** counted as a 25th security layer. The 24 numbered
+  layers describe what protects an operator who changed no configuration, and these lists
+  are empty until someone fills them in. A future security audit may reasonably take tool
+  control up as Layer 25 once it has been reviewed as one; `docs/SECURITY_AUDIT_REPORT.md`
+  is a dated document and has been left untouched
+
 ## [1.2.3] - 2026-08-16
 
 ### Added
@@ -168,7 +256,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [linuz90/claude-telegram-bot](https://github.com/linuz90/claude-telegram-bot) (MIT License)
 - Core architecture: grammY Telegram bot, Claude Agent SDK integration, streaming responses, multi-modal input (text, voice, photo, document, video), MCP support
 
-[Unreleased]: https://github.com/fidpa/cc-telegram-bot/compare/v1.2.3...HEAD
+[Unreleased]: https://github.com/fidpa/cc-telegram-bot/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/fidpa/cc-telegram-bot/compare/v1.2.3...v1.3.0
 [1.2.3]: https://github.com/fidpa/cc-telegram-bot/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/fidpa/cc-telegram-bot/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/fidpa/cc-telegram-bot/compare/v1.2.0...v1.2.1

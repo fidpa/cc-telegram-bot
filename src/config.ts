@@ -83,6 +83,16 @@ export const ALERT_SOCKET_PATH =
   process.env.ALERT_SOCKET_PATH || `/run/${BOT_ID}/alerts.sock`;
 export const ALERT_SOCKET_SECRET = process.env.ALERT_SOCKET_SECRET || "";
 
+/**
+ * Synthetic user ID for the alert session, so machine-generated alerts cannot
+ * collide with a real Telegram user.
+ *
+ * Lives here rather than in alert-socket.ts because session.ts has to know it
+ * too — the cost limit must never apply to this ID — and session.ts cannot
+ * import from alert-socket.ts, which imports session.ts.
+ */
+export const ALERT_USER_ID = 0;
+
 // ============== Claude CLI Path ==============
 
 // Auto-detect from PATH, or use environment override
@@ -165,6 +175,51 @@ export const ALLOWED_PATHS: string[] = allowedPathsStr
       .map((p) => p.trim())
       .filter(Boolean)
   : defaultAllowedPaths;
+
+// ============== Tool Control ==============
+
+/**
+ * Tools Claude may use, and tools it may never use.
+ *
+ * Both empty by default, which is exactly the state this bot shipped in until
+ * now: it ran with `permissionMode: "bypassPermissions"` and passed no tool
+ * restriction of any kind to the SDK, so Claude had Write/Edit/Bash across
+ * everything in ALLOWED_PATHS. Path scope was the only boundary; what could be
+ * done inside that scope was unbounded. That is defensible for the admin bot
+ * this was written as, and wrong for a fork pointed at a documentation repo it
+ * is only supposed to read.
+ *
+ * Mapped onto the SDK options that actually restrict (checked against
+ * @anthropic-ai/claude-agent-sdk 0.3.233, sdk.d.ts):
+ *
+ *   ALLOWED_TOOLS    -> `tools`            deny-by-default base set
+ *   DISALLOWED_TOOLS -> `disallowedTools`  removed from the model's context
+ *
+ * Deliberately NOT mapped onto `allowedTools`, despite the matching name. That
+ * option is an auto-approve list — "tools that are auto-allowed without
+ * prompting for permission" — and its own docs say to use `tools` instead to
+ * restrict availability. Under bypassPermissions everything is auto-approved
+ * anyway, so writing an allowlist there would read like a restriction and
+ * enforce nothing. Reference implementations that list ~16 tools under that
+ * name are solving the permission-prompt problem, not this one.
+ *
+ * When a lock here turns against itself: ALLOWED_TOOLS is deny-by-default, so
+ * every tool the bot needs has to be on it. Forget mcp__ask-user__* and the
+ * inline-keyboard flow stops working; forget Task and sub-agents lose their
+ * tools while still being spawnable. An allowlist that is missing an entry
+ * fails as a broken bot, not as a visible error — which is why the runtime
+ * check in session.ts reports what it saw instead of failing silently.
+ */
+const parseToolList = (raw: string | undefined): string[] =>
+  (raw || "")
+    .split(",")
+    .map((t) => t.trim())
+    .filter(Boolean);
+
+export const ALLOWED_TOOLS: string[] = parseToolList(process.env.ALLOWED_TOOLS);
+export const DISALLOWED_TOOLS: string[] = parseToolList(
+  process.env.DISALLOWED_TOOLS
+);
 
 // ============== Persona ==============
 
@@ -382,6 +437,45 @@ export const WHISPER_LANGUAGE = process.env.WHISPER_LANGUAGE || "de";
 // Mutable — startup validation may disable if dependencies are missing
 let transcriptionAvailable = WHISPER_MODE === "local";
 
+// ============== Output Verbosity ==============
+
+/**
+ * How much of Claude's work is streamed to Telegram.
+ *
+ *   0  final answer only
+ *   1  thinking previews and tool status (default, and what the bot did before
+ *      this setting existed)
+ *   2  additionally tool results and a closing stats line
+ *
+ * The bot streamed every tool call and every reasoning fragment unconditionally.
+ * For system administration that running commentary is the point; for anything
+ * else it is a wall of noise between the question and the answer.
+ *
+ * This deliberately does NOT gate the blocked-command, denied-path and blocked-
+ * tool messages. Those look like status updates and are not: they are the only
+ * explanation the user gets for a refused request. Silencing them at level 0
+ * would have turned a noise setting into a security setting, and would have
+ * quietly undone the tool control that ships alongside it.
+ *
+ * Per-user override at runtime via /verbose, held in memory exactly like the
+ * /model override.
+ */
+function parseVerboseLevel(raw: string | undefined): number {
+  if (raw === undefined || !raw.trim()) return 1;
+
+  const parsed = Number(raw.trim());
+  if (parsed === 0 || parsed === 1 || parsed === 2) return parsed;
+
+  console.warn(
+    `WARNING: Unrecognized VERBOSE_LEVEL="${raw}", expected 0, 1 or 2. Defaulting to 1.`
+  );
+  return 1;
+}
+
+export const VERBOSE_LEVEL: number = parseVerboseLevel(
+  process.env.VERBOSE_LEVEL
+);
+
 // ============== Thinking Keywords ==============
 
 const thinkingKeywordsStr =
@@ -439,6 +533,38 @@ export const RATE_LIMIT_REQUESTS = parseInt(
 export const RATE_LIMIT_WINDOW = parseInt(
   process.env.RATE_LIMIT_WINDOW || "60",
   10
+);
+
+// ============== Cost Limit ==============
+
+/**
+ * Cumulative USD ceiling per Telegram user and calendar month.
+ *
+ * Unset (or 0) means unlimited, which is what every installation has today.
+ * Costs are still recorded in that case — a number in `/status` is useful long
+ * before anyone wants a ceiling, and it is the only way to pick a sensible one.
+ *
+ * The figure comes from the SDK's `total_cost_usd`, which its own
+ * documentation calls an estimate rather than a billing statement. Treat it as
+ * a guard rail, not as accounting.
+ */
+function parseCostLimit(raw: string | undefined): number | null {
+  if (!raw || !raw.trim()) return null;
+
+  const parsed = Number(raw.trim());
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    console.warn(
+      `WARNING: Ignoring COST_LIMIT_USD="${raw}" — expected a non-negative number. No limit applied.`
+    );
+    return null;
+  }
+  // 0 reads as "no limit", not as "block everything": a bot that refuses every
+  // request is a configuration mistake nobody intends to express this way.
+  return parsed > 0 ? parsed : null;
+}
+
+export const COST_LIMIT_USD: number | null = parseCostLimit(
+  process.env.COST_LIMIT_USD
 );
 
 // ============== Alert Database ==============

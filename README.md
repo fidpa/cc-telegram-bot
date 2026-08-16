@@ -1,4 +1,4 @@
-# cc-telegram-bot
+# Claude Code Telegram Bot
 
 [![Release](https://img.shields.io/github/v/release/fidpa/cc-telegram-bot)](https://github.com/fidpa/cc-telegram-bot/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -25,6 +25,7 @@ Security-hardened Telegram bot for remote Claude Code access.
 - **Environment Isolation** -- secrets stripped from `process.env` before Claude spawns
 - **Alert Socket** -- Unix domain socket for automated system alerts from monitoring scripts
 - **Alert History (SQLite)** -- every alert persisted for trend analysis, MTTR metrics, and data-driven reports
+- **Per-User Cost Cap** -- cumulative spend tracked per user and calendar month, with an optional ceiling
 - **Group Chat Support** -- whitelisted groups with @mention or reply-to-bot activation
 - **LaunchAgent for macOS** -- always-on operation with automatic restart
 - **systemd for Linux** -- always-on operation with automatic restart and EOD timer
@@ -81,11 +82,12 @@ bun run start
 | `/start` | Welcome message |
 | `/new` | Start a new conversation (clears session) |
 | `/stop` | Stop the current Claude session |
-| `/status` | Show session info and rate limit status |
+| `/status` | Show session info, rate limit status, and this month's cost |
 | `/resume` | Resume previous conversation |
 | `/restart` | Restart the bot process |
 | `/retry` | Retry the last failed message |
 | `/model` (`/m`) | Switch Claude model (Sonnet, Opus, Haiku) |
+| `/verbose` | Show or set streaming verbosity (`0`, `1`, `2`) |
 | `/alert` | Send a message into the alert session (daily context) |
 
 ## Configuration
@@ -108,6 +110,9 @@ All configuration via environment variables (see [.env.example](.env.example)):
 | `WHISPER_CLI_PATH` | Optional | Path to the `whisper-cli` binary (auto-detected from `PATH`) |
 | `WHISPER_LANGUAGE` | Optional | Whisper language code (default: `de`) |
 | `ALLOWED_PATHS` | Optional | Directories Claude can access (default: working dir, ~/Documents, ~/Downloads, ~/Desktop, ~/.claude) |
+| `ALLOWED_TOOLS` | Optional | Comma-separated tool allowlist; unset (default) = the SDK's default tool set |
+| `DISALLOWED_TOOLS` | Optional | Comma-separated tool denylist; unset (default) = nothing blocked |
+| `COST_LIMIT_USD` | Optional | Cumulative USD ceiling per user and calendar month (unset = unlimited; costs are recorded either way) |
 | `RATE_LIMIT_ENABLED` | Optional | Enable rate limiting (default: `true`) |
 | `RATE_LIMIT_REQUESTS` | Optional | Requests per window (default: `20`) |
 | `RATE_LIMIT_WINDOW` | Optional | Window in seconds (default: `60`) |
@@ -122,6 +127,7 @@ All configuration via environment variables (see [.env.example](.env.example)):
 | `ALERT_DB_PATH` | Optional | SQLite alert history database (default: `~/.cc-telegram-bot/alerts.db`) |
 | `DAILY_LOG_DIR` | Optional | Directory for daily bot reports |
 | `ANTHROPIC_API_KEY` | Optional | API key (alternative to CLI auth) |
+| `VERBOSE_LEVEL` | Optional | Streaming verbosity: `0` final answer only, `1` thinking + tool status (default), `2` also tool results and stats |
 | `THINKING_KEYWORDS` | Optional | Keywords triggering adaptive thinking (`effort: high`) |
 | `THINKING_DEEP_KEYWORDS` | Optional | Keywords triggering deep thinking (`effort: max`) |
 
@@ -157,6 +163,35 @@ The bot implements defense-in-depth with 24 security layers:
 | 22 | Alert Queue | alert-socket.ts | Bounded queue (max 20) with FIFO drain |
 | 23 | Per-User Context Files | session.ts | MCP context scoped per user ID |
 | 24 | Scripting Language Blocklist | security.ts | Blocks env access via python/node/ruby/perl + /proc |
+
+### Tool Control (opt-in, empty by default)
+
+`ALLOWED_TOOLS` and `DISALLOWED_TOOLS` restrict which tools Claude may use.
+Both are empty unless you set them, which is why they are **not** counted among
+the 24 layers above: that count describes what the bot does as shipped, not
+what it can be configured to do. A defence that is empty by default protects
+nobody until an operator fills it in.
+
+They map onto the Agent SDK options that actually restrict -- `tools` for the
+allowlist, `disallowedTools` for the denylist. The similarly named
+`allowedTools` option is deliberately unused: it is an auto-approve list for
+permission prompts, and under `bypassPermissions` everything is auto-approved
+anyway, so an allowlist there would look like a restriction and enforce
+nothing.
+
+The bot additionally checks every tool call it sees in the response stream
+against both lists. **That check reports, it does not prevent** -- by the time a
+tool call is visible in the stream it has already been dispatched. It does cover
+sub-agent calls, since the SDK emits their tool blocks by default. Real
+prevention would need a `PreToolUse` hook, which the SDK itself recommends for
+this and which the bot does not install today (see
+[docs/security-limitations.md](docs/security-limitations.md)).
+
+The enforcing copy of the lists is the one handed to the SDK. Note that `tools`
+is documented as the base set of *built-in* tools, so it is not shown to
+constrain MCP tools -- for those, the runtime check is what notices. Listing
+`Task` in the denylist removes the sub-agent layer entirely and is the stronger
+setting where that is acceptable.
 
 ### Credential Leak Prevention
 
@@ -247,7 +282,8 @@ cc-telegram-bot/
 |   +-- session.ts         # ClaudeSession class (Agent SDK, streaming, persistence)
 |   +-- security.ts        # RateLimiter, path validation, command safety
 |   +-- alert-socket.ts    # Unix socket listener, alert prompts, EOD report
-|   +-- alert-db.ts        # SQLite alert history store (bun:sqlite, WAL mode)
+|   +-- alert-db.ts        # SQLite store: alert history + per-user costs (bun:sqlite, WAL mode)
+|   +-- cost.ts            # Per-user cost accounting (user_costs table, monthly period)
 |   +-- formatting.ts      # Markdown -> Telegram HTML conversion
 |   +-- utils.ts           # Audit logging, voice transcription, typing indicators
 |   +-- types.ts           # Shared TypeScript types
@@ -465,4 +501,4 @@ Marc Allgeier ([@fidpa](https://github.com/fidpa))
 
 ---
 
-**Production-tested since January 2026** | 24 security layers | ~5,900 lines TypeScript | ~2,000 lines documentation
+**Production-tested since January 2026** | 24 security layers | ~6,800 lines TypeScript | ~2,000 lines documentation

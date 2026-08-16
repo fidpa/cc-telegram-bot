@@ -5,6 +5,7 @@
 import type { Context } from "grammy";
 import { getSession } from "../session";
 import { ALLOWED_USERS } from "../config";
+import { CostLimitError } from "../cost";
 import {
   isAuthorized,
   rateLimiter,
@@ -110,6 +111,13 @@ export async function handleText(ctx: Context): Promise<void> {
     } catch (error) {
       const errorStr = String(error);
       const isClaudeCodeCrash = errorStr.includes("exited with code");
+
+      // The cost limit already explained itself through the notice channel.
+      // Retrying it would fail identically, and the generic error below would
+      // replace a precise reason with a vague one.
+      if (error instanceof CostLimitError) {
+        break;
+      }
 
       // Clean up any partial messages from this attempt
       for (const toolMsg of state.toolMessages) {

@@ -8,6 +8,7 @@ import type { Context } from "grammy";
 import { unlinkSync } from "fs";
 import { getSession } from "../session";
 import { ALLOWED_USERS } from "../config";
+import { CostLimitError } from "../cost";
 import { isAuthorized } from "../security";
 import { auditLog, startTypingIndicator } from "../utils";
 import { StreamingState, createStatusCallback } from "./streaming";
@@ -145,6 +146,11 @@ export async function handleCallback(ctx: Context): Promise<void> {
       } catch (error) {
         console.debug("Failed to delete tool message:", error);
       }
+    }
+
+    // The cost limit reported itself through the notice channel already.
+    if (error instanceof CostLimitError) {
+      return;
     }
 
     if (String(error).includes("abort") || String(error).includes("cancel")) {

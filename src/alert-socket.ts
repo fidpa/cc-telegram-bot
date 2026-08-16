@@ -24,15 +24,15 @@ import { z } from "zod/v4";
 interface SocketData {
   buffer: string;
 }
-import { ALERT_SOCKET_PATH, ALERT_SOCKET_SECRET, ALLOWED_GROUP_IDS, DAILY_LOG_DIR } from "./config";
+import { ALERT_SOCKET_PATH, ALERT_SOCKET_SECRET, ALERT_USER_ID, ALLOWED_GROUP_IDS, DAILY_LOG_DIR } from "./config";
 import { getSession } from "./session";
 import { StreamingState } from "./handlers/streaming";
 import { auditLog } from "./utils";
 import { insertAlert, markProcessed } from "./alert-db";
 import { unlinkSync } from "fs";
 
-// Alert user ID — alerts use a synthetic user ID to avoid collision with real users
-const ALERT_USER_ID = 0;
+// ALERT_USER_ID now lives in config.ts — session.ts needs it too, to keep the
+// cost limit away from the monitoring path, and cannot import from here.
 const ALERT_USERNAME = "alert-system";
 
 // Track daily session — reset at midnight for fresh context
@@ -330,6 +330,17 @@ function createAlertStatusCallback(
           parse_mode: "HTML",
         });
         state.toolMessages.push(toolMsg);
+      } else if (statusType === "notice") {
+        // The alert path had no channel for "this did not happen, and here is
+        // why": "text" is skipped by design (see the comment below), and
+        // anything pushed onto state.toolMessages is deleted on "done". A
+        // blocked tool call or a refused request would have reached the group
+        // as silence, while markProcessed() recorded the alert as handled.
+        const { escapeHtml } = await import("./formatting");
+        const { redactSecrets } = await import("./utils");
+        await bot.api.sendMessage(chatId, escapeHtml(redactSecrets(content)), {
+          parse_mode: "HTML",
+        });
       } else if (statusType === "segment_end" && segmentId !== undefined && content) {
         const { convertMarkdownToHtml } = await import("./formatting");
         const { redactSecrets } = await import("./utils");

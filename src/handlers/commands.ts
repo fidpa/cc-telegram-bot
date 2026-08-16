@@ -1,12 +1,21 @@
 /**
  * Command handlers for Claude Telegram Bot.
  *
- * /start, /new, /stop, /status, /resume, /restart, /retry
+ * /start, /new, /stop, /status, /resume, /restart, /retry, /model, /verbose, /alert
  */
 
 import type { Context } from "grammy";
 import { getSession } from "../session";
-import { ALLOWED_USERS, ALLOWED_GROUP_IDS, CLAUDE_MODEL, RESTART_FILE } from "../config";
+import {
+  ALERT_USER_ID,
+  ALLOWED_USERS,
+  ALLOWED_GROUP_IDS,
+  CLAUDE_MODEL,
+  COST_LIMIT_USD,
+  RESTART_FILE,
+  VERBOSE_LEVEL,
+} from "../config";
+import { CostLimitError, getUserCost } from "../cost";
 import { isAuthorized } from "../security";
 
 /**
@@ -34,6 +43,7 @@ export async function handleStart(ctx: Context): Promise<void> {
       `/resume - Letzte Sitzung fortsetzen\n` +
       `/retry - Letzte Nachricht wiederholen\n` +
       `/m - Modell wechseln (s/o/h)\n` +
+      `/verbose - Ausführlichkeit (0/1/2)\n` +
       `/restart - Bot neu starten\n\n` +
       `<b>Tipps:</b>\n` +
       `• Mit <code>!</code> vorangestellt aktuelle Anfrage unterbrechen\n` +
@@ -153,6 +163,25 @@ export async function handleStatus(ctx: Context): Promise<void> {
     if (usage.cache_read_input_tokens) {
       lines.push(
         `   Cache: ${usage.cache_read_input_tokens.toLocaleString()}`
+      );
+    }
+  }
+
+  // Cumulative cost for the current calendar month.
+  // Shown whenever anything has been recorded, not only when a limit is set —
+  // you cannot choose a sensible ceiling without first seeing the number.
+  const cost = getUserCost(userId!);
+  if (cost.costUsd > 0 || COST_LIMIT_USD !== null) {
+    if (COST_LIMIT_USD !== null) {
+      const pct = Math.round((cost.costUsd / COST_LIMIT_USD) * 100);
+      lines.push(
+        `\n💰 Diesen Monat: $${cost.costUsd.toFixed(2)} / $${COST_LIMIT_USD.toFixed(2)} (${pct}%)`,
+        `   ${cost.queries} Anfragen`
+      );
+    } else {
+      lines.push(
+        `\n💰 Diesen Monat: $${cost.costUsd.toFixed(2)} (kein Limit)`,
+        `   ${cost.queries} Anfragen`
       );
     }
   }
@@ -384,6 +413,77 @@ export async function handleModel(ctx: Context): Promise<void> {
 }
 
 /**
+ * /verbose - Show or change how much of Claude's work is streamed.
+ *
+ * Storage mirrors /model deliberately: session.verboseLevel is held in memory
+ * on the per-user ClaudeSession, is never persisted, and is not cleared by
+ * kill(). So it survives /new, is lost on restart, and then falls back to
+ * VERBOSE_LEVEL — exactly how the model override behaves.
+ */
+export async function handleVerbose(ctx: Context): Promise<void> {
+  const userId = ctx.from?.id;
+  const text = ctx.message?.text || "";
+
+  if (!userId) return;
+
+  if (!isAuthorized(userId, ALLOWED_USERS)) {
+    await ctx.reply("Unauthorized.");
+    return;
+  }
+
+  const session = getSession(userId);
+  const args = text.split(" ").slice(1);
+
+  const descriptions: Record<number, string> = {
+    0: "Nur die Endantwort",
+    1: "Denkschritte und Werkzeug-Status (Standard)",
+    2: "Zusätzlich Werkzeug-Ergebnisse und eine Abschlusszeile",
+  };
+
+  const levelHelp =
+    `<b>Stufe wechseln:</b>\n` +
+    `• <code>/verbose 0</code> - ${descriptions[0]}\n` +
+    `• <code>/verbose 1</code> - ${descriptions[1]}\n` +
+    `• <code>/verbose 2</code> - ${descriptions[2]}`;
+
+  // No arguments - show current level
+  if (args.length === 0) {
+    const current = session.verboseLevel ?? VERBOSE_LEVEL;
+    const source =
+      session.verboseLevel === null ? "aus VERBOSE_LEVEL" : "für diese Sitzung";
+
+    await ctx.reply(
+      `🔊 <b>Ausführlichkeit</b>\n\n` +
+        `<b>Stufe ${current}</b> — ${descriptions[current]}\n` +
+        `<i>${source}</i>\n\n` +
+        levelHelp +
+        `\n\n<i>Gilt ab nächster Nachricht. Blockierte Befehle und abgelehnte ` +
+        `Pfade werden auf jeder Stufe gemeldet.</i>`,
+      { parse_mode: "HTML" }
+    );
+    return;
+  }
+
+  const levelArg = Number(args[0]);
+
+  if (levelArg === 0 || levelArg === 1 || levelArg === 2) {
+    session.verboseLevel = levelArg;
+
+    await ctx.reply(
+      `✅ Ausführlichkeit: <b>Stufe ${levelArg}</b>\n\n` +
+        `${descriptions[levelArg]}\n\n` +
+        `Gilt ab nächster Nachricht.`,
+      { parse_mode: "HTML" }
+    );
+  } else {
+    await ctx.reply(
+      `❌ Unbekannt: <code>${args[0]}</code>\n\n` + levelHelp,
+      { parse_mode: "HTML" }
+    );
+  }
+}
+
+/**
  * /alert <message> - Send a message into the alert session (user ID 0).
  * Allows interactive access to the daily alert session from Telegram.
  * The alert session has context over all alerts processed today.
@@ -402,7 +502,7 @@ export async function handleAlert(ctx: Context): Promise<void> {
   const message = raw.replace(/^\/alert(@\S+)?\s*/, "").trim();
 
   if (!message) {
-    const alertSession = getSession(0);
+    const alertSession = getSession(ALERT_USER_ID);
     const status = alertSession.isActive ? "active" : "inactive";
     const running = alertSession.isRunning ? " (processing)" : "";
     await ctx.reply(
@@ -420,7 +520,7 @@ export async function handleAlert(ctx: Context): Promise<void> {
   const groupId = ALLOWED_GROUP_IDS[0] || chatId;
   if (!groupId) return;
 
-  const alertSession = getSession(0);
+  const alertSession = getSession(ALERT_USER_ID);
 
   // Wait if alert is already processing
   if (alertSession.isRunning) {
@@ -447,14 +547,22 @@ export async function handleAlert(ctx: Context): Promise<void> {
     const response = await alertSession.sendMessageStreaming(
       prefixedMessage,
       ctx.from?.username || "unknown",
-      0, // Alert user ID
+      ALERT_USER_ID,
       statusCallback,
       chatId!,
-      ctx
+      ctx,
+      // Bill a human's manual /alert to that human, not to the alert session.
+      // The alert session is exempt from the cost limit so monitoring cannot
+      // be silenced by a budget — without this, /alert would be a way for a
+      // user who had hit their limit to keep working on that exemption.
+      userId!
     );
 
-    await auditLog(0, "alert-manual", "ALERT_CMD", message, response);
+    await auditLog(ALERT_USER_ID, "alert-manual", "ALERT_CMD", message, response);
   } catch (error) {
+    if (error instanceof CostLimitError) {
+      return; // Already explained through the notice channel.
+    }
     const errorStr = String(error);
     if (!errorStr.includes("abort") && !errorStr.includes("cancel")) {
       await ctx.reply("❌ An error occurred. Check logs for details.");

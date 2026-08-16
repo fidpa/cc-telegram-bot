@@ -48,6 +48,17 @@ This means Claude can:
 
 This is intentional. The bot is designed for personal use from mobile, where confirming every file read or command would be impractical. Instead of per-action prompts, we rely on defense-in-depth with 24 security layers described below.
 
+"Use all tools" describes the shipped state. The set can be narrowed with
+`ALLOWED_TOOLS` and `DISALLOWED_TOOLS`, which are handed to the Agent SDK as
+`tools` and `disallowedTools`. Both are empty by default, so they are not counted
+among the 24 layers -- the count describes what protects an operator who changed
+nothing. Deployments that do not need write access (a bot pointed at a
+documentation repository, for example) should set them; see the Tool Control
+section in `README.md`. Note that the bot's own runtime check of those lists
+reports blocked calls but does not prevent execution -- it sees them only after
+dispatch, sub-agent calls included. The SDK options are what enforce; a
+`PreToolUse` hook would be the way to prevent, and is not installed today.
+
 **This is not configurable** -- the bot always runs in bypass mode. If you need permission prompts, use Claude Code directly instead.
 
 ## Threat Model
@@ -181,6 +192,10 @@ Each user gets their own Claude session instance. Sessions cannot interact with 
 
 - Data directory (`~/.cc-telegram-bot/`): mode 0o700 (owner only)
 - Audit log: mode 0o600 (owner read/write only)
+- SQLite database (`alerts.db`): mode 0o600 on creation. It holds alert history
+  and, since the per-user cost cap was added, the `user_costs` table -- Telegram
+  user IDs with their monthly spend. Same file, same permissions, no new
+  location to secure.
 
 ### Layer 14: Output Redaction
 

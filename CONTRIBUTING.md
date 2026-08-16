@@ -33,8 +33,9 @@ cc-telegram-bot/
 +-- src/               # TypeScript source code
 |   +-- handlers/      # Message type handlers
 |   +-- config.ts      # Environment & safety configuration
-|   +-- security.ts    # Rate limiting, path validation, command safety
+|   +-- security.ts    # Rate limiting, path validation, command safety, tool lists
 |   +-- session.ts     # Claude Agent SDK session management
+|   +-- cost.ts        # Per-user cost accounting and the monthly ceiling
 |   +-- ...
 +-- ask_user_mcp/      # MCP server for Telegram inline keyboards
 +-- launchagent/       # macOS LaunchAgent for always-on operation

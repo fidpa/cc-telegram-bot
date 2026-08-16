@@ -100,14 +100,31 @@ cannot access it via `printenv` or `$TELEGRAM_BOT_TOKEN`. Output redaction
 
 **What we do:** Nothing -- this is SDK behavior.
 
-**What we don't do:** Apply tool-level safety checks to sub-agent operations.
+**What we don't do:** Prevent sub-agent tool calls before they execute.
 
 **Why:** The Claude Agent SDK's `Task` tool spawns sub-agents that inherit the
-parent's `permissionMode: "bypassPermissions"` setting. There is no SDK-level
-hook to intercept sub-agent tool calls.
+parent's `permissionMode: "bypassPermissions"` setting.
 
-**Accepted risk:** If Claude spawns a sub-agent, that agent has the same
-unrestricted access as the parent. The safety prompt applies to all agents.
+**Correction (Agent SDK 0.3.233):** This section previously stated that "there is
+no SDK-level hook to intercept sub-agent tool calls". That is not true of the
+installed SDK, and the claim has been removed rather than carried forward:
+
+- A `PreToolUse` hook fires before execution and also fires inside sub-agents --
+  `HookInput.agent_id` exists precisely to tell the two apart. The bot does not
+  install such a hook today; doing so is the way to get real prevention without
+  giving up `bypassPermissions`.
+- `canUseTool` is *not* an option here. The SDK states that under
+  `bypassPermissions` every tool call is auto-approved before that callback is
+  consulted, and points to `PreToolUse` instead.
+- Sub-agent tool calls **are** visible to the bot's own runtime check. The SDK
+  emits `tool_use`/`tool_result` blocks from sub-agents by default (see the
+  `forwardSubagentText` option), and `session.ts` does not filter them out. So
+  `ALLOWED_TOOLS`/`DISALLOWED_TOOLS` violations one level down are detected and
+  reported -- they are simply not prevented, exactly as on the main thread.
+
+**Accepted risk:** A sub-agent has the same unrestricted access as its parent,
+and detection happens after dispatch. Listing `Task` in `DISALLOWED_TOOLS`
+removes that layer entirely and is the stronger setting where it is acceptable.
 
 ### 5. Data Exfiltration via Web Tools (Audit: not numbered)
 
@@ -120,10 +137,13 @@ in URLs (e.g., `https://evil.com/?data=<stolen_content>`). Detecting this
 would require inspecting all outbound URLs for sensitive content, which is
 impractical without understanding what constitutes "sensitive" in context.
 
+**Mitigation available:** Set `DISALLOWED_TOOLS=WebFetch,WebSearch` (and `Task`,
+so a sub-agent cannot reach them either). This is passed to the Agent SDK, which
+removes the tools from the model's context.
+
 **Possible mitigations (not implemented):**
 - Network-level egress filtering (firewall rules)
 - DNS-level blocking of unknown domains
-- Disabling `WebFetch`/`WebSearch` tools if not needed
 
 ### 6. Rate Limiter Resets on Restart (Audit: partial)
 
@@ -161,9 +181,11 @@ If you need stronger security guarantees than this bot provides:
 
 3. **Single-user mode:** Keep `TELEGRAM_ALLOWED_USERS` to exactly one user ID.
 
-4. **Disable unnecessary tools:** If you don't need MCP servers, web access,
-   or file operations, configure Claude to restrict its tool usage via the
-   system prompt.
+4. **Disable unnecessary tools:** If you don't need MCP servers, web access, or
+   file operations, set `ALLOWED_TOOLS` (deny-by-default allowlist) or
+   `DISALLOWED_TOOLS`. These are enforced by the Agent SDK, not by the system
+   prompt -- a prompt rule is a request, an absent tool is not reachable.
+   Include `Task` in a denylist so sub-agents cannot route around it.
 
 5. **Monitor audit logs:** JSON format is enabled by default (`AUDIT_LOG_JSON=true`)
    to prevent log injection. Set up log rotation and alerting on suspicious

@@ -12,6 +12,7 @@ import { Database, type Statement } from "bun:sqlite";
 import { chmodSync, existsSync, mkdirSync } from "fs";
 import { dirname } from "path";
 import { ALERT_DB_PATH } from "./config";
+import { closeCostDb, initCostDb } from "./cost";
 
 let db: Database | null = null;
 
@@ -71,6 +72,11 @@ export function initAlertDb(): void {
     WHERE id = $id
   `);
 
+  // Per-user cost accounting shares this connection rather than opening a
+  // second one against the same file. See src/cost.ts for why this database
+  // and not sessions.json.
+  initCostDb(db);
+
   const count = db.query("SELECT COUNT(*) as cnt FROM alerts").get() as { cnt: number };
   console.log(`[ALERT-DB] Database initialized: ${ALERT_DB_PATH} (${count.cnt} existing records)`);
 }
@@ -123,6 +129,7 @@ export function markProcessed(alertId: number, responseLength: number): void {
 export function closeAlertDb(): void {
   insertStmt = null;
   updateStmt = null;
+  closeCostDb();
   if (db) {
     db.close();
     db = null;

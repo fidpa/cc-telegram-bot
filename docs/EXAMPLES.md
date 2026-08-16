@@ -160,6 +160,8 @@ journalctl -u cc-telegram-bot -f --no-hostname | grep '\[ALERT\]'
 
 Every alert is persisted to a SQLite database (`~/.cc-telegram-bot/alerts.db` by default). Use `sqlite3` to query the history for trend analysis, MTTR metrics, and reporting.
 
+The same database also holds the `user_costs` table (see [Query Cost History](#query-cost-history) below). Queries against `alerts` are unaffected by it.
+
 ### Top Alert Types (Last 30 Days)
 
 ```bash
@@ -214,6 +216,44 @@ sqlite3 ~/.cc-telegram-bot/alerts.db "
   WHERE processed_at IS NULL
   ORDER BY received_at DESC
   LIMIT 20;
+"
+```
+
+## Query Cost History
+
+The same database holds the `user_costs` table: one row per Telegram user and
+calendar month, with the running total the `COST_LIMIT_USD` ceiling is checked
+against. The period string (`YYYY-MM`, local time) is part of the primary key,
+so a new month starts a new row and older months stay readable as history.
+
+Costs come from the Agent SDK's own estimate, not from a billing statement.
+Two turns are never counted: the alert session is exempt from the ceiling, and
+a turn ended by an inline-keyboard hand-off or `/stop` emits no cost figure.
+
+### Spend Per User, Current Month
+
+```bash
+sqlite3 -header -column ~/.cc-telegram-bot/alerts.db "
+  SELECT user_id,
+         ROUND(cost_usd, 2) as usd,
+         queries,
+         updated_at
+  FROM user_costs
+  WHERE period = strftime('%Y-%m', 'now', 'localtime')
+  ORDER BY cost_usd DESC;
+"
+```
+
+### Spend Trend Across Months
+
+```bash
+sqlite3 -header -column ~/.cc-telegram-bot/alerts.db "
+  SELECT period,
+         ROUND(SUM(cost_usd), 2) as usd,
+         SUM(queries) as queries
+  FROM user_costs
+  GROUP BY period
+  ORDER BY period DESC;
 "
 ```
 

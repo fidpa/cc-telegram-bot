@@ -13,20 +13,25 @@ import {
 import { readFileSync, unlinkSync } from "fs";
 import type { Context } from "grammy";
 import {
+  ALERT_USER_ID,
   ALLOWED_PATHS,
+  ALLOWED_TOOLS,
   CLAUDE_MODEL,
+  COST_LIMIT_USD,
+  DISALLOWED_TOOLS,
   MCP_SERVERS,
   SAFETY_PROMPT,
   SESSION_FILE,
   STREAMING_THROTTLE_MS,
-  TEMP_PATHS,
   THINKING_DEEP_KEYWORDS,
   THINKING_KEYWORDS,
+  VERBOSE_LEVEL,
   WORKING_DIR,
 } from "./config";
+import { addUserCost, CostLimitError, getUserCost } from "./cost";
 import { formatToolStatus } from "./formatting";
 import { checkPendingAskUserRequests } from "./handlers/streaming";
-import { checkCommandSafety, isPathAllowed } from "./security";
+import { checkToolCallSafety, stripToolWildcards } from "./security";
 import type {
   SavedSession,
   SessionHistory,
@@ -109,6 +114,14 @@ class ClaudeSession {
   lastMessage: string | null = null;
   conversationTitle: string | null = null;
   preferredModel: string | null = null; // User's preferred model (overrides default)
+  // Per-user streaming verbosity, null = fall back to VERBOSE_LEVEL.
+  //
+  // Mirrors preferredModel exactly, on purpose: in memory only, never written
+  // to sessions.json, and deliberately not cleared by kill() — so it survives
+  // /new and is lost on restart, falling back to the env default just as the
+  // model does. The alert session is a separate instance (getSession of
+  // ALERT_USER_ID), so a user's /verbose never changes what the group sees.
+  verboseLevel: number | null = null;
 
   private abortController: AbortController | null = null;
   private isQueryRunning = false;
@@ -191,6 +204,11 @@ class ClaudeSession {
    * Send a message to Claude with streaming updates via callback.
    *
    * @param ctx - grammY context for ask_user button display
+   * @param billToUserId - who this turn's cost counts against, when that is
+   *   not `userId`. Only /alert passes it: that command runs in the alert
+   *   session (ALERT_USER_ID) but is typed by a real person, and without this
+   *   a user who had hit their limit could keep working through /alert on the
+   *   alert session's untaxed budget.
    */
   async sendMessageStreaming(
     message: string,
@@ -198,9 +216,11 @@ class ClaudeSession {
     userId: number,
     statusCallback: StatusCallback,
     chatId?: number,
-    ctx?: Context
+    ctx?: Context,
+    billToUserId?: number
   ): Promise<string> {
     this._userId = userId;
+    const billTo = billToUserId ?? userId;
 
     // Write chat context to file for ask_user MCP subprocess (SEC-004)
     // SEC-F7: Per-user file prevents cross-user race condition
@@ -215,6 +235,7 @@ class ClaudeSession {
 
     const isNewSession = !this.isActive;
     const thinkingLabel = getThinkingLevel(message);
+    const verbose = this.verboseLevel ?? VERBOSE_LEVEL;
 
     // Inject current date/time at session start so Claude doesn't need to call a tool for it
     let messageToSend = message;
@@ -245,6 +266,20 @@ class ClaudeSession {
       allowDangerouslySkipPermissions: true,
       systemPrompt: SAFETY_PROMPT,
       mcpServers: MCP_SERVERS,
+      // Both spread conditionally rather than passed as empty arrays.
+      //
+      // `tools: []` is not "no restriction", it disables every built-in tool.
+      // And for disallowedTools, settingSources: ["user", "project"] above
+      // lets permissions.deny from ~/.claude/settings.json contribute; whether
+      // an explicit [] replaces or merges with that is not something the type
+      // definitions state. Not setting the key at all is the only form that
+      // provably leaves an existing installation running exactly as before.
+      ...(ALLOWED_TOOLS.length > 0
+        ? { tools: stripToolWildcards(ALLOWED_TOOLS) }
+        : {}),
+      ...(DISALLOWED_TOOLS.length > 0
+        ? { disallowedTools: DISALLOWED_TOOLS }
+        : {}),
       ...getThinkingOptions(thinkingLabel),
       additionalDirectories: ALLOWED_PATHS,
       resume: this.sessionId || undefined,
@@ -276,6 +311,30 @@ class ClaudeSession {
       throw new Error("Query cancelled");
     }
 
+    // Cost ceiling. Deliberately placed after the stopRequested reset above:
+    // callback.ts calls stop() without a following clearStopRequested(), so
+    // returning before that reset would leave the flag set and the next real
+    // request would die on "Query cancelled" long after the limit was raised.
+    //
+    // ALERT_USER_ID is exempt on purpose. A cost ceiling that silences system
+    // monitoring converts a billing safeguard into an outage, and the operator
+    // would find out from the thing the alerts were supposed to warn about.
+    if (COST_LIMIT_USD !== null && billTo !== ALERT_USER_ID) {
+      const { costUsd } = getUserCost(billTo);
+      if (costUsd >= COST_LIMIT_USD) {
+        const msg =
+          `Cost limit reached: $${costUsd.toFixed(2)} of $${COST_LIMIT_USD.toFixed(2)} ` +
+          `this month. Resets at the start of next month, or raise COST_LIMIT_USD.`;
+        console.warn(`[COST] Blocked user ${billTo}: ${msg}`);
+        // "notice" so the reason survives on every path, including alerts;
+        // the throw so no caller mistakes the refusal for an answer. Without
+        // it, alert-socket.ts would hand the text to markProcessed() and file
+        // the unanswered alert as handled.
+        await statusCallback("notice", msg);
+        throw new CostLimitError(msg);
+      }
+    }
+
     // Create abort controller for cancellation
     this.abortController = new AbortController();
     this.isQueryRunning = true;
@@ -290,6 +349,7 @@ class ClaudeSession {
     let lastTextUpdate = 0;
     let queryCompleted = false;
     let askUserTriggered = false;
+    let turnCostUsd = 0;
 
     try {
       // Use V1 query() API - supports all options including cwd, mcpServers, etc.
@@ -324,7 +384,11 @@ class ClaudeSession {
               const thinkingText = block.thinking;
               if (thinkingText) {
                 console.log(`THINKING BLOCK: ${thinkingText.slice(0, 100)}...`);
-                await statusCallback("thinking", thinkingText);
+                // Level 0 keeps the server-side log and drops the Telegram
+                // message — the record stays, the noise goes.
+                if (verbose >= 1) {
+                  await statusCallback("thinking", thinkingText);
+                }
               }
             }
 
@@ -333,47 +397,29 @@ class ClaudeSession {
               const toolName = block.name;
               const toolInput = block.input as Record<string, unknown>;
 
-              // Safety check for Bash commands
-              if (toolName === "Bash") {
-                const command = String(toolInput.command || "");
-                const [isSafe, reason] = checkCommandSafety(command);
-                if (!isSafe) {
-                  console.warn(`BLOCKED: ${reason}`);
-                  await statusCallback("tool", `BLOCKED: ${reason}`);
-                  throw new Error(`Unsafe command blocked: ${reason}`);
-                }
-              }
-
-              // Safety check for file operations
-              if (["Read", "Write", "Edit"].includes(toolName)) {
-                const filePath = String(toolInput.file_path || "");
-                if (filePath) {
-                  // Allow reads from temp paths and .claude directories
-                  const isTmpRead =
-                    toolName === "Read" &&
-                    (TEMP_PATHS.some((p) => filePath.startsWith(p)) ||
-                      filePath.includes("/.claude/"));
-
-                  if (!isTmpRead && !isPathAllowed(filePath)) {
-                    console.warn(
-                      `BLOCKED: File access outside allowed paths: ${filePath}`
-                    );
-                    await statusCallback("tool", `Access denied: ${filePath}`);
-                    throw new Error(`File access blocked: ${filePath}`);
-                  }
-                }
-              }
-
-              // Safety check for Glob and Grep path parameters
-              if (["Glob", "Grep"].includes(toolName)) {
-                const searchPath = String(toolInput.path || "");
-                if (searchPath && !isPathAllowed(searchPath)) {
-                  console.warn(
-                    `BLOCKED: ${toolName} outside allowed paths: ${searchPath}`
-                  );
-                  await statusCallback("tool", `Access denied: ${searchPath}`);
-                  throw new Error(`${toolName} access blocked: ${searchPath}`);
-                }
+              // Command blocklist, path validation and the tool allow/deny
+              // lists — see checkToolCallSafety() in security.ts.
+              //
+              // Reported through "notice", never "tool": tool messages are
+              // deleted on "done" and again by the catch blocks in text.ts and
+              // media-group.ts, so the user used to see only the generic error
+              // and never the reason. A refusal is not a progress update, and
+              // it is reported at every VERBOSE_LEVEL including 0.
+              //
+              // This reads the output stream, so it reports and ends the turn
+              // rather than preventing the call — by the time a tool_use block
+              // appears here the call has already been dispatched. Sub-agent
+              // calls DO reach this point (the SDK emits their tool_use blocks
+              // by default and nothing here filters on parent_tool_use_id);
+              // what is missing is prevention, not visibility.
+              const [toolSafe, toolNotice] = checkToolCallSafety(
+                toolName,
+                toolInput
+              );
+              if (!toolSafe) {
+                console.warn(`BLOCKED: ${toolNotice}`);
+                await statusCallback("notice", toolNotice);
+                throw new Error(`Tool call blocked: ${toolNotice}`);
               }
 
               // Segment ends when tool starts
@@ -393,8 +439,11 @@ class ClaudeSession {
               this.lastTool = toolDisplay;
               console.log(`Tool: ${toolDisplay}`);
 
-              // Don't show tool status for ask_user - the buttons are self-explanatory
-              if (!toolName.startsWith("mcp__ask-user")) {
+              // Don't show tool status for ask_user - the buttons are self-explanatory.
+              // Level 0 drops the status line entirely; the BLOCKED/Access denied
+              // messages above are NOT gated by the level — see VERBOSE_LEVEL in
+              // config.ts for why.
+              if (verbose >= 1 && !toolName.startsWith("mcp__ask-user")) {
                 await statusCallback("tool", toolDisplay);
               }
 
@@ -447,10 +496,60 @@ class ClaudeSession {
           }
         }
 
+        // Level 2: surface what the tools actually returned, not just that
+        // they ran. Seeing a command's output is the difference between
+        // "Bash ran" and knowing whether it worked.
+        //
+        // The Array.isArray guard is required, not defensive: on a user
+        // message `message` is a MessageParam whose content is
+        // `string | ContentBlockParam[]`, unlike the assistant branch above
+        // where it is always an array. Iterating it unguarded does not
+        // compile under strict mode.
+        //
+        // Filtering on tool_result also excludes replayed user prompts, which
+        // arrive on this same message type but carry text blocks.
+        if (verbose >= 2 && event.type === "user") {
+          const content = event.message.content;
+          if (Array.isArray(content)) {
+            for (const block of content) {
+              if (block.type !== "tool_result") continue;
+
+              const raw =
+                typeof block.content === "string"
+                  ? block.content
+                  : Array.isArray(block.content)
+                    ? block.content
+                        .map((c) => (c.type === "text" ? c.text : `[${c.type}]`))
+                        .join("")
+                    : "";
+
+              if (raw.trim()) {
+                const preview =
+                  raw.length > 500 ? `${raw.slice(0, 500)}...` : raw;
+                // "notice" rather than "tool": tool results are exactly the
+                // content that gets deleted on "done", and they carry raw
+                // output with < and & that would break an unescaped HTML send.
+                await statusCallback("notice", preview);
+              }
+            }
+          }
+        }
+
         // Result message
         if (event.type === "result") {
           console.log("Response complete");
           queryCompleted = true;
+
+          // total_cost_usd is non-optional on both result variants, so no
+          // presence test. Error results are recorded too when non-zero: a
+          // turn that failed halfway still burned tokens.
+          //
+          // The SDK documents this figure as cumulative per query() call and
+          // reset for resumed sessions. This bot calls query() once per
+          // message with `resume`, so each result carries only that turn —
+          // summing across calls is correct here. Summing across results
+          // *within* one call would not be.
+          turnCostUsd = event.total_cost_usd;
 
           // Capture usage if available
           if ("usage" in event && event.usage) {
@@ -460,6 +559,21 @@ class ClaudeSession {
               `Usage: in=${u.input_tokens} out=${u.output_tokens} cache_read=${
                 u.cache_read_input_tokens || 0
               } cache_create=${u.cache_creation_input_tokens || 0}`
+            );
+          }
+
+          // Level 2: what this turn cost, while the answer is still on screen.
+          // /status has the monthly total; this is the per-turn figure that
+          // makes the monthly one explicable.
+          if (verbose >= 2) {
+            const u = this.lastUsage;
+            const secs = (event.duration_ms / 1000).toFixed(1);
+            const tokens = u
+              ? ` · in ${u.input_tokens} / out ${u.output_tokens} tokens`
+              : "";
+            await statusCallback(
+              "notice",
+              `${secs}s${tokens} · $${turnCostUsd.toFixed(4)}`
             );
           }
         }
@@ -487,6 +601,25 @@ class ClaudeSession {
       this.abortController = null;
       this.queryStarted = null;
       this.currentTool = null;
+
+      // Booked here rather than in the result branch so a turn that throws
+      // after the result still gets charged.
+      //
+      // KNOWN HOLE, not a footnote: total_cost_usd exists only on the result
+      // event, and four paths leave the loop before it arrives — the ask_user
+      // hand-off, an explicit /stop, a `!` interrupt, and a tool call blocked
+      // by the checks above. All four consumed real tokens and all four book
+      // zero. Someone who works entirely through inline buttons, or who
+      // routinely interrupts long turns, never approaches the ceiling.
+      //
+      // The remedy is known and deliberately not taken here: the SDK's own
+      // maxBudgetUsd enforces mid-query, so it would also close the unbounded
+      // single-turn overshoot (this gate only checks *before* a turn, so one
+      // turn can exceed the limit by any amount). It needs its own handling of
+      // the error_max_budget_usd result subtype — otherwise alert-socket.ts
+      // would file an aborted turn as a completed one — and so belongs in a
+      // change of its own rather than bolted onto this one.
+      addUserCost(billTo, turnCostUsd);
       // Clean up context files to prevent cross-session leaks (SEC-004, SEC-F7)
       for (const f of [contextFile, genericContextFile]) {
         try {

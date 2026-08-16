@@ -164,6 +164,18 @@ export function createStatusCallback(
         // Redact secrets from tool status (SEC-008)
         const toolMsg = await ctx.reply(redactSecrets(content), { parse_mode: "HTML" });
         state.toolMessages.push(toolMsg);
+      } else if (statusType === "notice") {
+        // Deliberately NOT pushed onto state.toolMessages: "done" deletes that
+        // list, and the catch blocks in text.ts / media-group.ts delete it too.
+        // A notice explains why something was refused or blocked — it has to
+        // outlive the turn that produced it.
+        //
+        // escapeHtml because notices carry arbitrary content (tool results,
+        // blocked command text). formatToolStatus() escapes its own output, so
+        // the "tool" branch above can get away without it; this branch cannot.
+        await ctx.reply(escapeHtml(redactSecrets(content)), {
+          parse_mode: "HTML",
+        });
       } else if (statusType === "text" && segmentId !== undefined) {
         const now = Date.now();
         const lastEdit = state.lastEditTimes.get(segmentId) || 0;

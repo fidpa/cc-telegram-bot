@@ -6,6 +6,7 @@ import type { Context } from "grammy";
 import { unlinkSync } from "fs";
 import { getSession } from "../session";
 import { ALLOWED_USERS, TEMP_DIR, TRANSCRIPTION_AVAILABLE } from "../config";
+import { CostLimitError } from "../cost";
 import {
   isAuthorized,
   rateLimiter,
@@ -130,6 +131,11 @@ export async function handleVoice(ctx: Context): Promise<void> {
     await auditLog(userId, username, "VOICE", transcript, claudeResponse);
   } catch (error) {
     console.error("Error processing voice:", error);
+
+    // The cost limit reported itself through the notice channel already.
+    if (error instanceof CostLimitError) {
+      return;
+    }
 
     if (String(error).includes("abort") || String(error).includes("cancel")) {
       // Only show "Query stopped" if it was an explicit stop, not an interrupt from a new message

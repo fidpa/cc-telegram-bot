@@ -9,7 +9,9 @@ import { realpathSync } from "fs";
 import type { RateLimitBucket } from "./types";
 import {
   ALLOWED_PATHS,
+  ALLOWED_TOOLS,
   BLOCKED_PATTERNS,
+  DISALLOWED_TOOLS,
   RATE_LIMIT_ENABLED,
   RATE_LIMIT_REQUESTS,
   RATE_LIMIT_WINDOW,
@@ -248,6 +250,149 @@ export function checkCommandSafety(
     } catch {
       // If parsing fails, be cautious
       return [false, "Could not parse rm command for safety check"];
+    }
+  }
+
+  return [true, ""];
+}
+
+// ============== Tool Control ==============
+
+/**
+ * Does a configured spec match a tool name?
+ *
+ * Three forms, mirroring how the SDK documents its own MCP specs:
+ *   Read              exact name
+ *   mcp__ask-user__*  prefix wildcard (trailing *)
+ *   mcp__ask-user     MCP server-level spec, matches every tool of that server
+ */
+function toolSpecMatches(spec: string, toolName: string): boolean {
+  if (spec === toolName) return true;
+  if (spec.endsWith("*")) return toolName.startsWith(spec.slice(0, -1));
+  if (spec.startsWith("mcp__") && !spec.slice(5).includes("__")) {
+    return toolName.startsWith(`${spec}__`);
+  }
+  return false;
+}
+
+/**
+ * Is this tool permitted by ALLOWED_TOOLS / DISALLOWED_TOOLS?
+ *
+ * Both lists empty -> always true, which is the shipped default and the
+ * behaviour every existing installation has today. Deny wins over allow: a
+ * name on both lists is blocked, because the operator who wrote the denylist
+ * was answering a narrower question than the one who wrote the allowlist.
+ *
+ * IMPORTANT — what this is and is not. This is called while reading the output
+ * stream (session.ts), not before the tool runs. It reports and it aborts the
+ * turn; it does not prevent execution. That limit is the whole of it:
+ *
+ *   - `canUseTool` would be synchronous, but it does not fire here. The shipped
+ *     bundle says so itself: "permissionMode 'bypassPermissions' auto-approves
+ *     every tool call (except explicit deny rules) before the callback is
+ *     consulted. To gate every tool call, use a PreToolUse hook instead."
+ *   - A `PreToolUse` hook is therefore the SDK's own answer for real prevention,
+ *     and it fires inside sub-agents too (HookInput.agent_id, sdk.d.ts). It is
+ *     deliberately not wired up here — that reworks the permission path and
+ *     belongs in its own change, not alongside three unrelated features.
+ *   - Sub-agent tool calls ARE visible to this function. sdk.d.ts documents
+ *     that tool_use/tool_result blocks from sub-agents are emitted by default
+ *     (see `forwardSubagentText`), and session.ts does not filter on
+ *     parent_tool_use_id. Detection covers them; prevention still does not.
+ *
+ * Enforcement is `tools` / `disallowedTools` handed to the SDK — with the
+ * caveat that `tools` is documented as the base set of *built-in* tools, so it
+ * is not shown to constrain MCP tools. This function is the second pair of
+ * eyes: it covers what the options may not, it survives the SDK renaming or
+ * re-scoping them, and it makes a blocked call visible to the user instead of
+ * leaving a turn that just stops.
+ */
+export function isToolAllowed(
+  toolName: string
+): [allowed: boolean, reason: string] {
+  for (const spec of DISALLOWED_TOOLS) {
+    if (toolSpecMatches(spec, toolName)) {
+      return [false, `${toolName} is on DISALLOWED_TOOLS (matched "${spec}")`];
+    }
+  }
+
+  if (ALLOWED_TOOLS.length > 0) {
+    const permitted = ALLOWED_TOOLS.some((spec) =>
+      toolSpecMatches(spec, toolName)
+    );
+    if (!permitted) {
+      return [false, `${toolName} is not on ALLOWED_TOOLS`];
+    }
+  }
+
+  return [true, ""];
+}
+
+/**
+ * Drop wildcard specs before handing the list to the SDK.
+ *
+ * ALLOWED_TOOLS carries two grammars at once: isToolAllowed() understands
+ * "mcp__ask-user__*", while the SDK's `tools` option documents concrete names
+ * only. Passing a literal "mcp__ask-user__*" through would ask the SDK for a
+ * tool by that exact name. Wildcards therefore stay with the runtime check.
+ */
+export function stripToolWildcards(specs: string[]): string[] {
+  return specs.filter((s) => !s.endsWith("*"));
+}
+
+/**
+ * Run every safety check that applies to a single tool call.
+ *
+ * Collected here rather than inline in the streaming loop for two reasons: the
+ * loop had grown past the file-size limit in CONTRIBUTING.md, and all four
+ * checks are questions about safety, which is what this module is. The caller
+ * logs, reports and aborts — this function only decides.
+ *
+ * Returns the user-facing message as the second element, because the wording
+ * differs per check ("BLOCKED:" for a command, "Access denied:" for a path)
+ * and the caller should not have to reconstruct it.
+ */
+export function checkToolCallSafety(
+  toolName: string,
+  toolInput: Record<string, unknown>
+): [safe: boolean, notice: string] {
+  // L25-ish: tool allow/deny lists. No-op while both are empty.
+  const [toolOk, toolReason] = isToolAllowed(toolName);
+  if (!toolOk) {
+    return [false, `Blocked: ${toolReason}`];
+  }
+
+  // L5/L6: command blocklist
+  if (toolName === "Bash") {
+    const command = String(toolInput.command || "");
+    const [isSafe, reason] = checkCommandSafety(command);
+    if (!isSafe) {
+      return [false, `BLOCKED: ${reason}`];
+    }
+  }
+
+  // L7: file operation paths
+  if (["Read", "Write", "Edit"].includes(toolName)) {
+    const filePath = String(toolInput.file_path || "");
+    if (filePath) {
+      // Reads from temp paths and .claude directories stay allowed: that is
+      // where the bot puts its own downloads and where plan mode reads from.
+      const isTmpRead =
+        toolName === "Read" &&
+        (TEMP_PATHS.some((p) => filePath.startsWith(p)) ||
+          filePath.includes("/.claude/"));
+
+      if (!isTmpRead && !isPathAllowed(filePath)) {
+        return [false, `Access denied: ${filePath}`];
+      }
+    }
+  }
+
+  // L7: Glob and Grep search roots
+  if (["Glob", "Grep"].includes(toolName)) {
+    const searchPath = String(toolInput.path || "");
+    if (searchPath && !isPathAllowed(searchPath)) {
+      return [false, `Access denied: ${searchPath}`];
     }
   }
 

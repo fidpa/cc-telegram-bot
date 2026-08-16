@@ -19,6 +19,7 @@ import {
   handleRestart,
   handleRetry,
   handleModel,
+  handleVerbose,
   handleAlert,
   handleText,
   handleVoice,
@@ -152,6 +153,7 @@ bot.command("restart", handleRestart);
 bot.command("retry", handleRetry);
 bot.command("model", handleModel);
 bot.command("m", handleModel); // Short alias for /model
+bot.command("verbose", handleVerbose); // Streaming verbosity 0/1/2
 bot.command("alert", handleAlert); // Send message into alert session (user ID 0)
 
 // ============== Message Handlers ==============

@@ -11,6 +11,7 @@ export {
   handleRestart,
   handleRetry,
   handleModel,
+  handleVerbose,
   handleAlert,
 } from "./commands";
 export { handleText } from "./text";

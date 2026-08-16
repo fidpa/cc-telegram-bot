@@ -6,8 +6,17 @@ import type { Context } from "grammy";
 import type { Message } from "grammy/types";
 
 // Status callback for streaming updates
+//
+// "notice" is the channel for messages that are neither Claude's answer nor
+// transient progress: a blocked tool call, a refused request, a closing stats
+// line. It exists because "tool" was the only alternative, and "tool" messages
+// are deleted on "done" (streaming.ts) or dropped entirely on the alert path
+// (alert-socket.ts only implements tool/segment_end/done). A blocked tool call
+// that vanishes before it is read is indistinguishable from one that never
+// happened. Every StatusCallback implementation MUST handle "notice" and MUST
+// NOT put the message on the ephemeral cleanup list.
 export type StatusCallback = (
-  type: "thinking" | "tool" | "text" | "segment_end" | "done",
+  type: "thinking" | "tool" | "text" | "segment_end" | "done" | "notice",
   content: string,
   segmentId?: number
 ) => Promise<void>;
