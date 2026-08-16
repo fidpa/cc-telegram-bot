@@ -357,12 +357,13 @@ export async function handleModel(ctx: Context): Promise<void> {
   // Available models (short names)
   const models = {
     "s": "claude-sonnet-5",
-    "o": "claude-opus-4-8",
+    "o": "claude-opus-5",
     "h": "claude-haiku-4-5",
   };
 
   const modelNames = {
     "claude-sonnet-5": "Sonnet 5",
+    "claude-opus-5": "Opus 5",
     "claude-opus-4-8": "Opus 4.8",
     "claude-haiku-4-5": "Haiku 4.5",
   };

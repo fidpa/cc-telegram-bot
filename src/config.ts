@@ -486,6 +486,32 @@ const thinkingDeepKeywordsStr =
 export const THINKING_KEYWORDS = thinkingKeywordsStr
   .split(",")
   .map((k) => k.trim().toLowerCase());
+/**
+ * Baseline thinking level for every message, before keywords are considered.
+ *
+ * `off` keeps the behaviour this bot always had: no keyword, no thinking. That
+ * suits an admin bot, where most turns are "restart the service" and reasoning
+ * budget would be spent on nothing.
+ *
+ * It suits a bot whose turns are judgement calls much less. Until now the only
+ * way to raise the floor was to remember a keyword in every single message,
+ * which is precisely the kind of discipline that fails on the turn it matters.
+ *
+ * Keywords still apply on top and can only raise the level, never lower it:
+ * with `normal` as the baseline, a message containing a deep keyword is still
+ * `deep`, and one containing none is `normal` rather than `off`.
+ */
+function parseThinkingDefault(raw: string | undefined): "off" | "normal" | "deep" {
+  const v = (raw || "off").trim().toLowerCase();
+  if (v === "off" || v === "normal" || v === "deep") return v;
+  console.warn(
+    `WARNING: Unrecognized THINKING_DEFAULT="${raw}", expected off, normal or deep. Defaulting to off.`
+  );
+  return "off";
+}
+
+export const THINKING_DEFAULT = parseThinkingDefault(process.env.THINKING_DEFAULT);
+
 export const THINKING_DEEP_KEYWORDS = thinkingDeepKeywordsStr
   .split(",")
   .map((k) => k.trim().toLowerCase());

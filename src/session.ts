@@ -22,6 +22,7 @@ import {
   ASK_USER_DIR,
   ASK_USER_TOOL_PREFIX,
   THINKING_DEEP_KEYWORDS,
+  THINKING_DEFAULT,
   THINKING_KEYWORDS,
   VERBOSE_LEVEL,
   WORKING_DIR,
@@ -40,23 +41,27 @@ import type {
 type ThinkingLevel = "off" | "normal" | "deep";
 
 /**
- * Determine thinking level based on message keywords.
+ * Determine thinking level from the message keywords, floored at
+ * THINKING_DEFAULT.
+ *
+ * Keywords raise, never lower: a baseline of `deep` is not undone by a message
+ * that happens to contain a `normal` keyword. Anything else would make the
+ * floor conditional on wording, which is the opposite of a floor.
  */
 function getThinkingLevel(message: string): ThinkingLevel {
   const msgLower = message.toLowerCase();
+  const rank: Record<ThinkingLevel, number> = { off: 0, normal: 1, deep: 2 };
+
+  let level: ThinkingLevel = THINKING_DEFAULT;
 
   // Check deep thinking triggers first (more specific)
   if (THINKING_DEEP_KEYWORDS.some((k) => msgLower.includes(k))) {
-    return "deep";
+    level = "deep";
+  } else if (THINKING_KEYWORDS.some((k) => msgLower.includes(k))) {
+    level = "normal";
   }
 
-  // Check normal thinking triggers
-  if (THINKING_KEYWORDS.some((k) => msgLower.includes(k))) {
-    return "normal";
-  }
-
-  // Default: no thinking
-  return "off";
+  return rank[level] >= rank[THINKING_DEFAULT] ? level : THINKING_DEFAULT;
 }
 
 /**

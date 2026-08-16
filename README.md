@@ -130,6 +130,7 @@ All configuration via environment variables (see [.env.example](.env.example)):
 | `VERBOSE_LEVEL` | Optional | Streaming verbosity: `0` final answer only, `1` thinking + tool status (default), `2` also tool results and stats |
 | `THINKING_KEYWORDS` | Optional | Keywords triggering adaptive thinking (`effort: high`) |
 | `THINKING_DEEP_KEYWORDS` | Optional | Keywords triggering deep thinking (`effort: max`) |
+| `THINKING_DEFAULT` | Optional | Baseline thinking for every message: `off` (default), `normal`, `deep`. Keywords can raise it, never lower it |
 
 MCP servers are configured in `mcp-config.ts` (see [mcp-config.example.ts](mcp-config.example.ts)).
 

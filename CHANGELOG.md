@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `THINKING_DEFAULT` (`off` by default = previous behaviour). Baseline thinking level for
+  every message, applied before keywords. Until now the only way to get reasoning effort
+  was a keyword in the message, so a bot whose turns are judgement calls rather than
+  commands depended on the operator remembering one every time — the kind of discipline
+  that fails on the message where it mattered. `normal` maps to `effort: high`, `deep` to
+  `effort: max`. Keywords still apply on top and can only raise the level, never lower it:
+  a `deep` baseline stays `deep` even when the message contains a `normal` keyword, since
+  a floor that wording can undo is not a floor
+
+### Changed
+- `/model o` now selects Opus 5 instead of Opus 4.8. Opus 4.8 stays in the display-name
+  table so an existing `CLAUDE_MODEL` pointing at it is still shown by name rather than as
+  a raw ID
+
+### Fixed
+- Two lines in `.env.example` broke `source .env`, which is how
+  `launchagent/start.sh` reads the file. Uncommenting them and starting the bot as a
+  LaunchAgent produced `command not found: are` and `command not found: the` instead of a
+  running bot. Every other multi-word value in the file was already quoted; these two
+  were not:
+  - the `BOT_PERSONA` example, added in 1.2.3 — now quoted, with a note saying why
+  - a prose line in the `ALLOWED_TOOLS` section that happened to wrap onto
+    `# ALLOWED_TOOLS=Read,Grep,Glob the built-ins reduce…`, so a sentence read as an
+    assignment. Reflowed. It also looked like a variable to the CI documentation gate,
+    which greps `^#? ?[A-Z_]{4,}=`; it passed only because `ALLOWED_TOOLS` is a real
+    variable, and a prose line starting with any other uppercase token would have failed
+    the gate with a confusing message
+  Found while configuring a bot built on this code, not by review — the failure only
+  surfaces on the LaunchAgent path, never when running `bun run start` by hand
+
 ## [1.3.1] - 2026-08-16
 
 ### Fixed
