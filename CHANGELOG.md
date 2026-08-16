@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.3] - 2026-08-16
+
+### Added
+- `BOT_ID` (default `cc-telegram-bot`). Every per-instance path now derives from it:
+  `~/<.BOT_ID>/` (sessions, audit log, alert database), `/tmp/<BOT_ID>/` (downloaded
+  media) and `/run/<BOT_ID>/alerts.sock`. Validated as a single path segment at startup,
+  so a value like `../../etc` aborts instead of escaping into the filesystem
+- `BOT_PERSONA` (default unchanged). The one-line role description at the top of the
+  system prompt is now configurable; the detailed personality stays in `CLAUDE.md`
+  inside `CLAUDE_WORKING_DIR`
+
+### Fixed
+- Two instances of this bot on one machine silently shared state. The data directory
+  (`~/.cc-telegram-bot`) and temp directory (`/tmp/telegram-bot`) were hardcoded, so both
+  wrote the same `sessions.json` — last write won, and a conversation could surface in the
+  wrong bot. Set a distinct `BOT_ID` per instance
+- The alert rules (7 through 12, roughly half the safety prompt) were emitted
+  unconditionally, including in bots with no alerting. They now follow the same gate as
+  the runtime — the alert socket only starts when a group is whitelisted (`src/index.ts`),
+  so the rules only appear when `TELEGRAM_ALLOWED_GROUPS` is set. Without alerts the
+  prompt drops from 4097 to 2181 characters, and the bot no longer carries instructions
+  to scan `DOCS_DIR` and await `/alert` approval for a subsystem that never runs
+- The persona line was hardcoded as "You are a Claude-powered Telegram admin bot". A bot
+  built on this code for any other purpose carried a contradictory role statement that
+  outranked its own `CLAUDE.md`, because the system prompt wins
+
+### Changed
+- Claude Agent SDK 0.3.215 -> 0.3.233, MCP SDK 1.29.0 -> 1.30.0, TypeScript `^5` -> `^5.9.3`
+
 ## [1.2.2] - 2026-08-12
 
 ### Fixed
@@ -139,7 +168,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [linuz90/claude-telegram-bot](https://github.com/linuz90/claude-telegram-bot) (MIT License)
 - Core architecture: grammY Telegram bot, Claude Agent SDK integration, streaming responses, multi-modal input (text, voice, photo, document, video), MCP support
 
-[Unreleased]: https://github.com/fidpa/cc-telegram-bot/compare/v1.2.2...HEAD
+[Unreleased]: https://github.com/fidpa/cc-telegram-bot/compare/v1.2.3...HEAD
+[1.2.3]: https://github.com/fidpa/cc-telegram-bot/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/fidpa/cc-telegram-bot/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/fidpa/cc-telegram-bot/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/fidpa/cc-telegram-bot/compare/v1.1.0...v1.2.0

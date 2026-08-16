@@ -97,6 +97,8 @@ All configuration via environment variables (see [.env.example](.env.example)):
 | `TELEGRAM_BOT_TOKEN` | Yes | Bot token from @BotFather |
 | `TELEGRAM_ALLOWED_USERS` | Yes | Comma-separated Telegram user IDs |
 | `CLAUDE_WORKING_DIR` | Recommended | Working directory for Claude (loads CLAUDE.md) |
+| `BOT_ID` | Optional | Instance name; all per-instance paths derive from it (default: `cc-telegram-bot`) |
+| `BOT_PERSONA` | Optional | One-line role description at the top of the system prompt (default: admin bot) |
 | `CLAUDE_MODEL` | Optional | Default Claude model (default: `claude-sonnet-5`) |
 | `CLAUDE_CLI_PATH` | Optional | Path to the Claude CLI (auto-detected from `PATH`) |
 | `CLAUDE_CODE_PATH` | Optional | Path to the Claude Code executable for the Agent SDK (standalone builds) |

@@ -91,9 +91,14 @@ MCP servers defined in `mcp-config.ts`.
 
 ### Runtime Files
 
-- `~/.cc-telegram-bot/sessions.json` -- Session persistence for `/resume`
-- `~/.cc-telegram-bot/audit.log` -- Audit log (configurable via `AUDIT_LOG_PATH`)
-- `/tmp/telegram-bot/` -- Downloaded photos/documents (cleaned up automatically)
+All runtime paths derive from `BOT_ID` (default `cc-telegram-bot`), so several
+instances can coexist on one machine:
+
+- `~/.<BOT_ID>/sessions.json` -- Session persistence for `/resume`
+- `~/.<BOT_ID>/audit.log` -- Audit log (configurable via `AUDIT_LOG_PATH`)
+- `~/.<BOT_ID>/alerts.db` -- Alert history (configurable via `ALERT_DB_PATH`)
+- `/tmp/<BOT_ID>/` -- Downloaded photos/documents (cleaned up automatically)
+- `/run/<BOT_ID>/alerts.sock` -- Alert socket (configurable via `ALERT_SOCKET_PATH`)
 
 ## Patterns
 
