@@ -7,16 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.5] - 2026-08-27: The editorial section states what holds, not how much did not
+
+A release page says what now holds. How many sections a check found wanting, and which
+internal rule they had been written against, address the maintainer rather than the
+reader, and they push the corrections themselves into the background. The rule this
+repository follows now is that the tally stays out of the release page while every
+correction keeps its own entry, with its effect and its anchor in the code.
+
+Documentation only. No source file, no dependency and no configuration was touched.
+
+### Changed
+
+- **The `[1.3.4]` section opens with what was put right, not with a count of what was
+  wrong.** Its introduction carried the number of sections that had described the wrong
+  tag, together with the evidence for it, which the first entry below already gives in
+  full. The introduction now states the pass and points at the entries. Every individual
+  correction stays exactly where it was, with its effect and its tag or file reference.
+
+- **The entry on typography no longer cites an internal rule file.** It measured the em
+  dashes against `.claude/commands/release.md`, which is not part of the published
+  repository and says nothing to a reader. What the entry reports is the change itself:
+  the characters are gone and what replaced them.
+
+### Upgrade notes
+
+Nothing to do. This release changes changelog text only.
+
 ## [1.3.4] - 2026-08-27: Release notes describe the tag they are published under
 
-Every entry in this file was rewritten to lead with what changed for an operator, and two
-sections were found to describe something other than the tag they sit under. The `[1.1.0]`
-section listed the alert socket, group chat support, the `/alert` command, the EOD report
-and "6 new security layers (19-24)". None of that was released by `v1.1.0`: the section was
-already present in the `v1.0.0` commit (`git show v1.0.0:CHANGELOG.md`), `git diff v1.0.0
-v1.1.0 -- CHANGELOG.md` is empty, and `src/alert-socket.ts`, `src/alert-db.ts` and the
-24-row layer table in `README.md` all exist at `v1.0.0`. Both sections described the state
-of the private predecessor, filed under public tags.
+Every entry in this file was rewritten to lead with what changed for an operator. Sections
+that described something other than the tag they sit under were corrected against the tags
+themselves; the corrections are listed below.
 
 No tag was moved and no released code changed. This is a documentation release.
 
@@ -37,8 +59,8 @@ No tag was moved and no released code changed. This is a documentation release.
   prose before, so a reader scanning the bold lines of a release got nothing. The cause,
   the measurement and the code anchor follow in the paragraph below, unchanged
 - **The em dashes and the ellipsis are gone.** Ten em dashes and one ellipsis had entered
-  the 1.2.3, 1.3.1 and 1.3.2 sections, although `.claude/commands/release.md` had required
-  ASCII (`--`, `->`) from the start. Replaced by the punctuation or the word each stood for
+  the 1.2.3, 1.3.1 and 1.3.2 sections. Replaced by the punctuation or the word each stood
+  for
 
 ### Changed
 
@@ -499,7 +521,8 @@ heading, which described a release that shipped four unrelated files.
 - Core architecture: grammY Telegram bot, Claude Agent SDK integration, streaming responses,
   multi-modal input (text, voice, photo, document, video), MCP support
 
-[Unreleased]: https://github.com/fidpa/cc-telegram-bot/compare/v1.3.4...HEAD
+[Unreleased]: https://github.com/fidpa/cc-telegram-bot/compare/v1.3.5...HEAD
+[1.3.5]: https://github.com/fidpa/cc-telegram-bot/compare/v1.3.4...v1.3.5
 [1.3.4]: https://github.com/fidpa/cc-telegram-bot/compare/v1.3.3...v1.3.4
 [1.3.3]: https://github.com/fidpa/cc-telegram-bot/compare/v1.3.2...v1.3.3
 [1.3.2]: https://github.com/fidpa/cc-telegram-bot/compare/v1.3.1...v1.3.2
