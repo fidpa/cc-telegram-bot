@@ -9,27 +9,27 @@
 
 Security-hardened Telegram bot for remote Claude Code access.
 
-**The Problem**: Running Claude Code remotely via Telegram with `bypassPermissions` requires systematic security hardening. Without permission prompts, Claude can read, write, and execute anything on the host machine. After conducting two security audits (Claude Opus 4.6, OWASP methodology), 24 hardening layers were implemented as defense-in-depth. This repository documents the entire process transparently -- including the limitations that remain.
+Running Claude Code remotely via Telegram with `bypassPermissions` requires systematic security hardening. Without permission prompts, Claude can read, write, and execute anything on the host machine. After conducting two security audits (Claude Opus 4.6, OWASP methodology), 24 hardening layers were implemented as defense-in-depth. This repository documents the entire process transparently, including the limitations that remain.
 
 ## Features
 
-- **24 Security Layers, Defense-in-Depth** -- from user allowlist to HMAC-signed audit logs (see [Security](#security-architecture))
-- **Multi-Modal Input** -- text, voice messages, photos, documents (PDF extraction), video
-- **Streaming Responses with Live Updates** -- real-time message editing as Claude generates
-- **Extended Thinking (Keyword-Triggered)** -- configurable keywords activate Claude's thinking mode
-- **MCP Server Integration** -- extensible via Model Context Protocol (ask-user inline keyboards, custom tools)
-- **Session Management** -- persist, resume, and switch conversations (`/new`, `/stop`, `/resume`)
-- **Local Voice Transcription** -- whisper.cpp with local GGML model, no data leaves the machine
-- **Audit Logging with HMAC Integrity** -- tamper-evident JSON logs with automatic rotation
-- **Output Redaction** -- credential leak prevention on all outbound Telegram messages
-- **Environment Isolation** -- secrets stripped from `process.env` before Claude spawns
-- **Alert Socket** -- Unix domain socket for automated system alerts from monitoring scripts
-- **Alert History (SQLite)** -- every alert persisted for trend analysis, MTTR metrics, and data-driven reports
-- **Per-User Cost Cap** -- cumulative spend tracked per user and calendar month, with an optional ceiling
-- **Group Chat Support** -- whitelisted groups with @mention or reply-to-bot activation
-- **LaunchAgent for macOS** -- always-on operation with automatic restart
-- **systemd for Linux** -- always-on operation with automatic restart and EOD timer
-- **Model Switching** -- `/model` command to switch between Sonnet, Opus, and Haiku at runtime
+- **24 Security Layers, Defense-in-Depth**: from user allowlist to HMAC-signed audit logs (see [Security](#security-architecture))
+- **Multi-Modal Input**: text, voice messages, photos, documents (PDF extraction), video
+- **Streaming Responses with Live Updates**: real-time message editing as Claude generates
+- **Extended Thinking (Keyword-Triggered)**: configurable keywords activate Claude's thinking mode
+- **MCP Server Integration**: extensible via Model Context Protocol (ask-user inline keyboards, custom tools)
+- **Session Management**: persist, resume, and switch conversations (`/new`, `/stop`, `/resume`)
+- **Local Voice Transcription**: whisper.cpp with local GGML model, no data leaves the machine
+- **Audit Logging with HMAC Integrity**: tamper-evident JSON logs with automatic rotation
+- **Output Redaction**: credential leak prevention on all outbound Telegram messages
+- **Environment Isolation**: secrets stripped from `process.env` before Claude spawns
+- **Alert Socket**: Unix domain socket for automated system alerts from monitoring scripts
+- **Alert History (SQLite)**: every alert persisted for trend analysis, MTTR metrics, and data-driven reports
+- **Per-User Cost Cap**: cumulative spend tracked per user and calendar month, with an optional ceiling
+- **Group Chat Support**: whitelisted groups with @mention or reply-to-bot activation
+- **LaunchAgent for macOS**: always-on operation with automatic restart
+- **systemd for Linux**: always-on operation with automatic restart and EOD timer
+- **Model Switching**: `/model` command to switch between Sonnet, Opus, and Haiku at runtime
 
 ## Known Limitations
 
@@ -105,7 +105,7 @@ All configuration via environment variables (see [.env.example](.env.example)):
 | `CLAUDE_CLI_PATH` | Optional | Path to the Claude CLI (auto-detected from `PATH`) |
 | `CLAUDE_CODE_PATH` | Optional | Path to the Claude Code executable for the Agent SDK (standalone builds) |
 | `DOCS_DIR` | Optional | Directory scanned for existing documentation during alert handling (default: `~/Documents/docs`) |
-| `WHISPER_MODE` | Optional | `local` (default) or `off` -- voice transcription mode |
+| `WHISPER_MODE` | Optional | `local` (default) or `off`; voice transcription mode |
 | `WHISPER_MODEL_PATH` | Optional | Path to GGML whisper model |
 | `WHISPER_CLI_PATH` | Optional | Path to the `whisper-cli` binary (auto-detected from `PATH`) |
 | `WHISPER_LANGUAGE` | Optional | Whisper language code (default: `de`) |
@@ -145,7 +145,7 @@ The bot implements defense-in-depth with 24 security layers:
 | 3 | Input Length Validation | text.ts | MAX_MESSAGE_LENGTH = 4096 |
 | 4 | Path Validation | security.ts | `isPathAllowed()` with symlink resolution |
 | 5 | Command Blocklist (String) | config.ts | 30+ dangerous patterns (fork bombs, disk destruction) |
-| 6 | Command Blocklist (Regex) | security.ts | 40+ regex patterns for robust detection |
+| 6 | Command Blocklist (Regex) | security.ts | 40+ regex patterns, harder to evade than plain strings |
 | 7 | File Operation Path Check | session.ts | Read/Write/Edit/Glob/Grep validated against ALLOWED_PATHS |
 | 8 | Safety System Prompt | config.ts | 7 anti-injection rules for Claude |
 | 9 | Content Delimiters | handlers | `user_document`/`user_caption`/`alert_data` safety tags |
@@ -173,7 +173,7 @@ the 24 layers above: that count describes what the bot does as shipped, not
 what it can be configured to do. A defence that is empty by default protects
 nobody until an operator fills it in.
 
-They map onto the Agent SDK options that actually restrict -- `tools` for the
+They map onto the Agent SDK options that actually restrict: `tools` for the
 allowlist, `disallowedTools` for the denylist. The similarly named
 `allowedTools` option is deliberately unused: it is an auto-approve list for
 permission prompts, and under `bypassPermissions` everything is auto-approved
@@ -183,7 +183,7 @@ nothing.
 The bot additionally checks every tool call against both lists in a `PreToolUse`
 hook, which the SDK itself recommends for gating under `bypassPermissions`.
 **That check prevents**: the call is denied before it runs, the reason goes back
-to the model as a tool result, and the model picks another route -- the turn
+to the model as a tool result, and the model picks another route; the turn
 continues instead of dying. It covers sub-agent calls too, since the hook fires
 inside them as well. The same check still runs over the response stream, but
 there it only reports, because a `tool_use` block is visible only after dispatch
@@ -195,13 +195,13 @@ The enforcing copy of the lists is the one handed to the SDK. The two lists do
 
 | | Built-in tools | MCP tools |
 |---|---|---|
-| `ALLOWED_TOOLS` (`tools`) | restricted | **not restricted** -- all remain |
+| `ALLOWED_TOOLS` (`tools`) | restricted | **not restricted**; all remain |
 | `DISALLOWED_TOOLS` (`disallowedTools`) | restricted | restricted |
 
 So an allowlist alone does not make a read-only bot once any MCP server is
 configured: the built-ins shrink to the listed set while every MCP tool stays
 available. Only the denylist reaches those, and it accepts the exact name, the
-wildcard form (`mcp__server__*`) and the server name (`mcp__server`) -- all
+wildcard form (`mcp__server__*`) and the server name (`mcp__server`); all
 three remove the server's tools from the session itself, not merely from the
 bot's runtime check. For a read-only configuration, set both lists.
 
@@ -210,7 +210,7 @@ stronger setting where that is acceptable.
 
 ### Credential Leak Prevention
 
-Four layers ensure secrets never reach the user, regardless of attack vector:
+Four layers stand between an attack and a secret reaching the user:
 
 ```
                            Attack
@@ -262,18 +262,18 @@ Integration examples (alert clients in Bash/Python, cron jobs, systemd health ch
 
 ### Perfect for
 
-- ✅ **Remote development** -- Run Claude Code on your Mac Mini or server, control it from your phone
-- ✅ **Headless machines** -- Access Claude on servers without monitors (SSH alternative with richer UX)
-- ✅ **Personal automation** -- Custom CLAUDE.md system prompt + MCP tools for your specific workflow
-- ✅ **Infrastructure monitoring** -- Alert socket receives system alerts, Claude analyzes and responds
-- ✅ **Voice-first interaction** -- Dictate to Claude via Telegram voice messages (local whisper.cpp)
+- ✅ **Remote development**: Run Claude Code on your Mac Mini or server, control it from your phone
+- ✅ **Headless machines**: Access Claude on servers without monitors (SSH alternative with richer UX)
+- ✅ **Personal automation**: Custom CLAUDE.md system prompt + MCP tools for your specific workflow
+- ✅ **Infrastructure monitoring**: Alert socket receives system alerts, Claude analyzes and responds
+- ✅ **Voice-first interaction**: Dictate to Claude via Telegram voice messages (local whisper.cpp)
 
 ### Not recommended for
 
-- ❌ **Multi-user SaaS** -- Designed for single-user or small trusted groups, not public deployment
-- ❌ **Air-gapped environments** -- Requires internet (Telegram API + Claude API)
-- ❌ **Production servers without backups** -- `bypassPermissions` means Claude can modify files; have backups
-- ❌ **Windows hosts** -- Bun and whisper.cpp support is limited on Windows (use WSL2)
+- ❌ **Multi-user SaaS**: Designed for single-user or small trusted groups, not public deployment
+- ❌ **Air-gapped environments**: Requires internet (Telegram API + Claude API)
+- ❌ **Production servers without backups**: `bypassPermissions` means Claude can modify files; have backups
+- ❌ **Windows hosts**: Bun and whisper.cpp support is limited on Windows (use WSL2)
 
 ### vs. Alternatives
 
@@ -376,8 +376,8 @@ Alert Socket -> JSON validation (Zod) -> Secret check -> SQLite insert -> Rate l
 ## Compatibility
 
 **Fully supported**:
-- macOS 13+ (Ventura) -- LaunchAgent for always-on operation
-- Ubuntu 22.04 LTS, 24.04 LTS -- systemd service
+- macOS 13+ (Ventura): LaunchAgent for always-on operation
+- Ubuntu 22.04 LTS, 24.04 LTS: systemd service
 - Debian 12 (Bookworm)
 - Raspberry Pi OS (64-bit, ARM64)
 
@@ -490,12 +490,12 @@ This project is a derivative work based on [claude-telegram-bot](https://github.
 The original project provides the Telegram-to-Claude-Code bridge architecture. This derivative adds systematic security hardening (24 layers from two documented audits), credential leak prevention, HMAC audit log integrity, environment isolation, output redaction, alert socket integration, and always-on operation.
 
 Additional dependencies:
-- [grammY](https://grammy.dev/) -- Telegram Bot API framework
-- [whisper.cpp](https://github.com/ggerganov/whisper.cpp) -- Local voice transcription
+- [grammY](https://grammy.dev/): Telegram Bot API framework
+- [whisper.cpp](https://github.com/ggerganov/whisper.cpp): Local voice transcription
 
 ## License
 
-MIT License - see [LICENSE](LICENSE)
+MIT License, see [LICENSE](LICENSE)
 
 (c) 2025 [Fabrizio Rinaldi](https://github.com/linuz90) (original: claude-telegram-bot)
 (c) 2026 [Marc Allgeier](https://github.com/fidpa) (derivative: cc-telegram-bot)
@@ -504,16 +504,16 @@ MIT License - see [LICENSE](LICENSE)
 
 Marc Allgeier ([@fidpa](https://github.com/fidpa))
 
-**Why I Built This**: I wanted to use Claude Code from my phone -- send a message, get a response, run commands on my Mac Mini remotely. The upstream project gave me the bridge, but running an AI agent with `bypassPermissions` on a machine I care about demanded a systematic security approach. Two security audits uncovered 22 findings across 7 attack vectors, all of which were addressed, resulting in 24 hardening layers. Five architectural limitations remain and are documented transparently. This project demonstrates that security work is as much about honest documentation as it is about writing code.
+**Why I Built This**: I wanted to use Claude Code from my phone: send a message, get a response, run commands on my Mac Mini remotely. The upstream project gave me the bridge, but running an AI agent with `bypassPermissions` on a machine I care about demanded a systematic security approach. Two security audits uncovered 22 findings across 7 attack vectors, all of which were addressed, resulting in 24 hardening layers. Five architectural limitations remain and are documented transparently. This project demonstrates that security work is as much about honest documentation as it is about writing code.
 
 ## See Also
 
-- [lydia-bible-bot](https://github.com/fidpa/lydia-bible-bot) -- Same architecture, Bible study domain (security audit, MCP Bible lookup, GDPR)
-- [telegram-multi-device-monitor](https://github.com/fidpa/telegram-multi-device-monitor) -- Multi-device monitoring via Telegram (Python/Bash, alert deduplication)
-- [ubuntu-server-security](https://github.com/fidpa/ubuntu-server-security) -- Server hardening (14 components, CIS Benchmark)
-- [step-ca-internal-pki](https://github.com/fidpa/step-ca-internal-pki) -- Internal PKI with auto-renewal and monitoring
-- [bash-production-toolkit](https://github.com/fidpa/bash-production-toolkit) -- Production-ready Bash libraries
+- [lydia-bible-bot](https://github.com/fidpa/lydia-bible-bot): Same architecture, Bible study domain (security audit, MCP Bible lookup, GDPR)
+- [telegram-multi-device-monitor](https://github.com/fidpa/telegram-multi-device-monitor): Multi-device monitoring via Telegram (Python/Bash, alert deduplication)
+- [ubuntu-server-security](https://github.com/fidpa/ubuntu-server-security): Server hardening (14 components, CIS Benchmark)
+- [step-ca-internal-pki](https://github.com/fidpa/step-ca-internal-pki): Internal PKI with auto-renewal and monitoring
+- [bash-production-toolkit](https://github.com/fidpa/bash-production-toolkit): Production-ready Bash libraries
 
 ---
 
-**Production-tested since January 2026** | 24 security layers | ~7,000 lines TypeScript | ~2,000 lines documentation
+**Production-tested since January 2026** | 24 security layers

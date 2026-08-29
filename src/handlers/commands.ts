@@ -357,14 +357,13 @@ export async function handleModel(ctx: Context): Promise<void> {
   // Available models (short names)
   const models = {
     "s": "claude-sonnet-5",
-    "o": "claude-opus-5",
+    "o": "claude-opus-4-6",
     "h": "claude-haiku-4-5",
   };
 
   const modelNames = {
     "claude-sonnet-5": "Sonnet 5",
-    "claude-opus-5": "Opus 5",
-    "claude-opus-4-8": "Opus 4.8",
+    "claude-opus-4-6": "Opus 4.6",
     "claude-haiku-4-5": "Haiku 4.5",
   };
 
@@ -379,7 +378,7 @@ export async function handleModel(ctx: Context): Promise<void> {
         `<code>${currentModel}</code>\n\n` +
         `<b>Modell wechseln:</b>\n` +
         `• <code>/m s</code> - Sonnet 5 (Standard)\n` +
-        `• <code>/m o</code> - Opus 4.8 (maximale Qualität)\n` +
+        `• <code>/m o</code> - Opus 4.6 (maximale Qualität)\n` +
         `• <code>/m h</code> - Haiku 4.5 (schnell)\n\n` +
         `<i>Gilt ab nächster Nachricht</i>`,
       { parse_mode: "HTML" }
@@ -406,7 +405,7 @@ export async function handleModel(ctx: Context): Promise<void> {
       `❌ Unbekannt: <code>${modelArg}</code>\n\n` +
         `Verfügbar:\n` +
         `• <code>/m s</code> - Sonnet 5\n` +
-        `• <code>/m o</code> - Opus 4.8\n` +
+        `• <code>/m o</code> - Opus 4.6\n` +
         `• <code>/m h</code> - Haiku 4.5`,
       { parse_mode: "HTML" }
     );

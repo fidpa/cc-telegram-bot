@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.6] - 2026-08-29: Refusal notices appear once and /m o selects what it names
+
+Two chat-visible fixes in the refusal path, one model-switch cleanup, and a
+README wording pass. No configuration changes.
+
+### Fixed
+
+- **Blocked-command notices no longer stack two prefixes.** `checkToolCallSafety()`
+  added "BLOCKED: " on top of the "Blocked: " that `checkCommandSafety()` already
+  supplies, so a denied Bash command read as "BLOCKED: Blocked: reading .env file
+  via shell" in the chat. Every branch in `src/security.ts` now owns exactly one
+  prefix
+- **Each distinct refusal wording reaches the chat once per turn.** A denied tool
+  call is not fatal: the model retries around the obstacle, so the same rule can
+  trip several times on the way to one answer, and the repeated identical notice
+  read as a malfunction. Deduplicated per turn in `src/session.ts`; the
+  server-side log keeps every occurrence
+
+### Changed
+
+- **`/m o` selects `claude-opus-4-6`, and the help text says so.** Before, three
+  places disagreed: the shortcut selected `claude-opus-5`, the help and error
+  text advertised "Opus 4.8", and the display-name map carried both Opus entries.
+  One model id now appears in the shortcut map, the display names, and both
+  user-facing texts (`src/handlers/commands.ts`). The default model
+  (`CLAUDE_MODEL`, `claude-sonnet-5`) is untouched
+- **The README drops its template intro, dash asides, and unmeasured counts.**
+  Wording pass against the workbench README quality standards: 42 double-hyphen
+  asides replaced with regular punctuation, the problem-intro template rewritten
+  as plain prose, the absolute claim that four layers "ensure secrets never
+  reach the user" reworded (the documented limitations say otherwise), and the
+  maintained line counts removed from the footer. Documentation only
+
+### Upgrade notes
+
+Nothing to do. `/m o` now hands new turns to Opus 4.6 instead of Opus 5; pick
+the model explicitly with `/m` if that matters to your workflow.
+
 ## [1.3.5] - 2026-08-27: The editorial section states what holds, not how much did not
 
 A release page says what now holds. How many sections a check found wanting, and which
@@ -521,7 +559,8 @@ heading, which described a release that shipped four unrelated files.
 - Core architecture: grammY Telegram bot, Claude Agent SDK integration, streaming responses,
   multi-modal input (text, voice, photo, document, video), MCP support
 
-[Unreleased]: https://github.com/fidpa/cc-telegram-bot/compare/v1.3.5...HEAD
+[Unreleased]: https://github.com/fidpa/cc-telegram-bot/compare/v1.3.6...HEAD
+[1.3.6]: https://github.com/fidpa/cc-telegram-bot/compare/v1.3.5...v1.3.6
 [1.3.5]: https://github.com/fidpa/cc-telegram-bot/compare/v1.3.4...v1.3.5
 [1.3.4]: https://github.com/fidpa/cc-telegram-bot/compare/v1.3.3...v1.3.4
 [1.3.3]: https://github.com/fidpa/cc-telegram-bot/compare/v1.3.2...v1.3.3

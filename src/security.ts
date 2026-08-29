@@ -358,8 +358,12 @@ export function stripToolWildcards(specs: string[]): string[] {
  * logs, reports and aborts — this function only decides.
  *
  * Returns the user-facing message as the second element, because the wording
- * differs per check ("BLOCKED:" for a command, "Access denied:" for a path)
- * and the caller should not have to reconstruct it.
+ * differs per check ("Blocked:" for a command or tool, "Access denied:" for a
+ * path) and the caller should not have to reconstruct it. The message reaches
+ * the user verbatim, so every branch here owns exactly one prefix — the Bash
+ * branch used to add "BLOCKED: " on top of the "Blocked: " that
+ * checkCommandSafety already supplies, which read as
+ * "BLOCKED: Blocked: reading .env file via shell" in the chat.
  */
 export function checkToolCallSafety(
   toolName: string,
@@ -376,7 +380,7 @@ export function checkToolCallSafety(
     const command = String(toolInput.command || "");
     const [isSafe, reason] = checkCommandSafety(command);
     if (!isSafe) {
-      return [false, `BLOCKED: ${reason}`];
+      return [false, reason];
     }
   }
 

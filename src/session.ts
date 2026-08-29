@@ -248,6 +248,9 @@ class ClaudeSession {
       messageToSend = datePrefix + message;
     }
 
+    // Refusal wordings already shown this turn; a later message reports anew.
+    const reportedNotices = new Set<string>();
+
     // Build SDK V1 options - supports all features
     const options: Options = {
       hooks: { PreToolUse: buildSafetyHook() },
@@ -378,8 +381,7 @@ class ClaudeSession {
               const thinkingText = block.thinking;
               if (thinkingText) {
                 console.log(`THINKING BLOCK: ${thinkingText.slice(0, 100)}...`);
-                // Level 0 keeps the server-side log and drops the Telegram
-                // message — the record stays, the noise goes.
+                // Level 0 keeps the server-side log, drops the Telegram noise.
                 if (verbose >= 1) {
                   await statusCallback("thinking", thinkingText);
                 }
@@ -391,33 +393,34 @@ class ClaudeSession {
               const toolName = block.name;
               const toolInput = block.input as Record<string, unknown>;
 
-              // REPORTING ONLY. Prevention is the PreToolUse hook's job — see
-              // buildSafetyHook() in security.ts, which denies the call before
-              // it runs and hands the reason back to the model.
+              // REPORTING ONLY. Prevention is the PreToolUse hook's job:
+              // buildSafetyHook() in security.ts denies before the call runs.
               //
-              // This must not throw, and that is an ordering fact rather than a
-              // preference: measured against SDK 0.3.233 the tool_use block
-              // arrives in this stream BEFORE the hook fires. Throwing here
-              // would abort the query while the hook is still pending, which is
-              // exactly the old behaviour where one blocked call cost the user
-              // the whole answer. For the same reason it cannot serve as a
-              // fallback — it never runs second.
+              // Must not throw: measured against SDK 0.3.233 the tool_use
+              // block arrives BEFORE the hook fires, so throwing aborts the
+              // query while the hook is pending (one blocked call cost the
+              // whole answer that way), and it never runs second anyway.
               //
-              // What it is good for is telling the user why the model changed
-              // course. Reported through "notice", never "tool": tool messages
-              // are deleted on "done" and again by the catch blocks in text.ts
-              // and media-group.ts, so a refusal sent as "tool" would vanish. A
-              // refusal is not a progress update, and it is shown at every
-              // VERBOSE_LEVEL including 0. Sub-agent calls reach this point too
-              // (the SDK emits their tool_use blocks and nothing here filters
-              // on parent_tool_use_id).
+              // Reported through "notice", never "tool": tool messages are
+              // deleted on "done" and by the catch blocks in text.ts and
+              // media-group.ts, so a refusal sent as "tool" would vanish.
+              // Shown at every VERBOSE_LEVEL including 0; sub-agent
+              // tool_use blocks land here too (no parent_tool_use_id filter).
+              //
+              // Each distinct wording reaches the chat once per turn: one
+              // rule can trip repeatedly while the model retries around a
+              // denial, and repeats read as a malfunction. The log keeps
+              // every occurrence.
               const [toolSafe, toolNotice] = checkToolCallSafety(
                 toolName,
                 toolInput
               );
               if (!toolSafe) {
                 console.warn(`BLOCKED: ${toolNotice}`);
-                await statusCallback("notice", toolNotice);
+                if (!reportedNotices.has(toolNotice)) {
+                  reportedNotices.add(toolNotice);
+                  await statusCallback("notice", toolNotice);
+                }
                 continue;
               }
 
