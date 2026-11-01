@@ -113,6 +113,8 @@ instances can coexist on one machine:
 
 **Streaming pattern**: All handlers use `createStatusCallback()` from `streaming.ts` and `session.sendMessageStreaming()` for live updates.
 
+**Writing files**: When the next step reads the file or reports success, the write must be finished first. Use `writeFileSync` in synchronous functions and `await Bun.write` in async ones, never a bare `Bun.write(...)`: it returns a promise, so a following `Bun.spawnSync` can read an incomplete file, and a failed write escapes the surrounding `try/catch`.
+
 **Type checking**: Run `bun run typecheck` periodically while editing TypeScript files. Fix any type errors before committing.
 
 **After code changes**: Restart the bot so changes can be tested (`bun run start`).

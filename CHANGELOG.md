@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-01: /model and the default model move to the current generation
+
+The default model changes for every installation that leaves `CLAUDE_MODEL` unset,
+which makes this a minor release. Alongside it: dependency updates within their
+declared ranges and one fix in how the session history is saved.
+
+### Changed
+
+- **`/model` offers the current model generation, and the default follows.** The
+  shortcuts now select `claude-sonnet-5-5` (`/m s`), `claude-opus-5-5` (`/m o`) and
+  `claude-haiku-5-5` (`/m h`), and the help and error texts name the same three. The
+  default model (`CLAUDE_MODEL` unset) moves from `claude-sonnet-5` to
+  `claude-sonnet-5-5` at the same per-token price. All three were checked through the
+  Agent SDK with thinking disabled, the bot's default thinking level: none of them
+  rejects it (`src/handlers/commands.ts`, `src/config.ts`)
+- **Dependencies updated within their declared ranges.** `@anthropic-ai/claude-agent-sdk`
+  0.3.316, `@modelcontextprotocol/sdk` 1.32.2, `grammy` 1.46.0, `zod` 4.6.7 and
+  `@types/bun` 1.4.4. TypeScript stays on 5.9: version 7 is a new major release and is
+  not part of this update
+
+### Fixed
+
+- **The session history is written before the bot reports it saved.** `saveSession()`
+  in `src/session.ts` called `Bun.write()` without awaiting it, so the log line came
+  before the write had finished and a failed write escaped the surrounding error
+  handling. It now writes synchronously with `writeFileSync`. `AGENTS.md` states the
+  rule for future code
+
+### Upgrade notes
+
+An installation that sets `CLAUDE_MODEL` keeps its model. Without it, the bot answers
+with Sonnet 5.5 after the update. Run `bun install` to pick up the new dependencies.
+
 ## [1.3.6] - 2026-08-29: Refusal notices appear once and /m o selects what it names
 
 Two chat-visible fixes in the refusal path, one model-switch cleanup, and a
@@ -559,7 +592,8 @@ heading, which described a release that shipped four unrelated files.
 - Core architecture: grammY Telegram bot, Claude Agent SDK integration, streaming responses,
   multi-modal input (text, voice, photo, document, video), MCP support
 
-[Unreleased]: https://github.com/fidpa/cc-telegram-bot/compare/v1.3.6...HEAD
+[Unreleased]: https://github.com/fidpa/cc-telegram-bot/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/fidpa/cc-telegram-bot/compare/v1.3.6...v1.4.0
 [1.3.6]: https://github.com/fidpa/cc-telegram-bot/compare/v1.3.5...v1.3.6
 [1.3.5]: https://github.com/fidpa/cc-telegram-bot/compare/v1.3.4...v1.3.5
 [1.3.4]: https://github.com/fidpa/cc-telegram-bot/compare/v1.3.3...v1.3.4

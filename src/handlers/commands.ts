@@ -356,15 +356,15 @@ export async function handleModel(ctx: Context): Promise<void> {
 
   // Available models (short names)
   const models = {
-    "s": "claude-sonnet-5",
-    "o": "claude-opus-4-6",
-    "h": "claude-haiku-4-5",
+    "s": "claude-sonnet-5-5",
+    "o": "claude-opus-5-5",
+    "h": "claude-haiku-5-5",
   };
 
   const modelNames = {
-    "claude-sonnet-5": "Sonnet 5",
-    "claude-opus-4-6": "Opus 4.6",
-    "claude-haiku-4-5": "Haiku 4.5",
+    "claude-sonnet-5-5": "Sonnet 5.5",
+    "claude-opus-5-5": "Opus 5.5",
+    "claude-haiku-5-5": "Haiku 5.5",
   };
 
   // No arguments - show current model
@@ -377,9 +377,9 @@ export async function handleModel(ctx: Context): Promise<void> {
         `<b>${modelName}</b>\n` +
         `<code>${currentModel}</code>\n\n` +
         `<b>Modell wechseln:</b>\n` +
-        `• <code>/m s</code> - Sonnet 5 (Standard)\n` +
-        `• <code>/m o</code> - Opus 4.6 (maximale Qualität)\n` +
-        `• <code>/m h</code> - Haiku 4.5 (schnell)\n\n` +
+        `• <code>/m s</code> - Sonnet 5.5 (Standard)\n` +
+        `• <code>/m o</code> - Opus 5.5 (maximale Qualität)\n` +
+        `• <code>/m h</code> - Haiku 5.5 (schnell)\n\n` +
         `<i>Gilt ab nächster Nachricht</i>`,
       { parse_mode: "HTML" }
     );
@@ -404,9 +404,9 @@ export async function handleModel(ctx: Context): Promise<void> {
     await ctx.reply(
       `❌ Unbekannt: <code>${modelArg}</code>\n\n` +
         `Verfügbar:\n` +
-        `• <code>/m s</code> - Sonnet 5\n` +
-        `• <code>/m o</code> - Opus 4.6\n` +
-        `• <code>/m h</code> - Haiku 4.5`,
+        `• <code>/m s</code> - Sonnet 5.5\n` +
+        `• <code>/m o</code> - Opus 5.5\n` +
+        `• <code>/m h</code> - Haiku 5.5`,
       { parse_mode: "HTML" }
     );
   }
