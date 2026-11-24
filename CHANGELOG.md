@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-11-24: The type check runs on TypeScript 7
+
+A development-tooling release. A running bot does not change, and there are no
+configuration changes.
+
+### Changed
+
+- **The type check runs on TypeScript 7.** `typescript` moves from 5.9.3 to `^7.0.2`, the
+  native compiler. It is a development dependency only: Bun runs the `.ts` sources
+  itself, so a running bot does not change. `tsconfig.json` stays as it is, since it
+  uses none of the options TypeScript 7 removed, and `bun run typecheck` reports no
+  errors on the tree. Measured on the same machine: 0.41 s per check instead of 1.21
+  to 1.37 s. TypeScript 7.0 ships without the language service API, so an editor set
+  to the workspace TypeScript version needs TypeScript 7 support (in VS Code, the
+  TypeScript 7 extension)
+
 ## [1.4.1] - 2026-11-24: Bot sessions no longer receive the account's claude.ai connectors
 
 One security fix, dependency updates within their declared ranges, and a clarified
@@ -631,7 +647,8 @@ heading, which described a release that shipped four unrelated files.
 - Core architecture: grammY Telegram bot, Claude Agent SDK integration, streaming responses,
   multi-modal input (text, voice, photo, document, video), MCP support
 
-[Unreleased]: https://github.com/fidpa/cc-telegram-bot/compare/v1.4.1...HEAD
+[Unreleased]: https://github.com/fidpa/cc-telegram-bot/compare/v1.4.2...HEAD
+[1.4.2]: https://github.com/fidpa/cc-telegram-bot/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/fidpa/cc-telegram-bot/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/fidpa/cc-telegram-bot/compare/v1.3.6...v1.4.0
 [1.3.6]: https://github.com/fidpa/cc-telegram-bot/compare/v1.3.5...v1.3.6

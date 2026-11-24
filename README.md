@@ -2,7 +2,7 @@
 
 [![Release](https://img.shields.io/github/v/release/fidpa/cc-telegram-bot)](https://github.com/fidpa/cc-telegram-bot/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.0%2B-blue?logo=typescript)](https://www.typescriptlang.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-7-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![Bun](https://img.shields.io/badge/Bun-1.1%2B-black?logo=bun)](https://bun.sh/)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)](https://bun.sh/)
 ![Last Commit](https://img.shields.io/github/last-commit/fidpa/cc-telegram-bot)
@@ -342,7 +342,7 @@ Alert Socket -> JSON validation (Zod) -> Secret check -> SQLite insert -> Rate l
 | Component | Technology |
 |-----------|-----------|
 | Runtime | [Bun](https://bun.sh/) |
-| Language | TypeScript 5 (strict mode) |
+| Language | TypeScript 7 (strict mode) |
 | AI Backend | [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk) |
 | Voice Transcription | [whisper.cpp](https://github.com/ggerganov/whisper.cpp) (local, GGML model) |
 | Telegram Library | [grammY](https://grammy.dev/) |
