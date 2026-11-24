@@ -263,14 +263,14 @@ class ClaudeSession {
       // Per-user copy: the ask_user subprocess needs to know whose turn this
       // is to read the right context file. See mcpServersForUser() in config.ts.
       mcpServers: mcpServersForUser(userId),
-      // Both spread conditionally rather than passed as empty arrays.
-      //
-      // `tools: []` is not "no restriction", it disables every built-in tool.
-      // And for disallowedTools, settingSources: ["user", "project"] above
-      // lets permissions.deny from ~/.claude/settings.json contribute; whether
-      // an explicit [] replaces or merges with that is not something the type
-      // definitions state. Not setting the key at all is the only form that
-      // provably leaves an existing installation running exactly as before.
+      // The account's claude.ai connectors (Gmail, Drive, ...) would run unprompted
+      // under bypassPermissions. A true from any settings source wins, so no
+      // settings.json can switch them back on.
+      settings: { disableClaudeAiConnectors: true },
+      // Spread conditionally, never as empty arrays: `tools: []` disables every
+      // built-in tool, and the types don't say whether `disallowedTools: []`
+      // replaces or merges with permissions.deny from settingSources. Omitting
+      // the key provably leaves an existing installation running as before.
       ...(ALLOWED_TOOLS.length > 0
         ? { tools: stripToolWildcards(ALLOWED_TOOLS) }
         : {}),

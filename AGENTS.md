@@ -1,6 +1,8 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to coding agents such as Claude Code (claude.ai/code) when working with code in this repository.
+
+The `CLAUDE.md` in the repository root is not a set of instructions for coding agents. It is the bot's shipped example system prompt, product content documented in `README.md` and `CONTRIBUTING.md`. Do not review a change against it, and do not rename, translate or delete it.
 
 ## Commands
 
@@ -118,6 +120,18 @@ instances can coexist on one machine:
 **Type checking**: Run `bun run typecheck` periodically while editing TypeScript files. Fix any type errors before committing.
 
 **After code changes**: Restart the bot so changes can be tested (`bun run start`).
+
+### Verification
+
+There is no test suite: `package.json` has no `test` script. The seven CI jobs in `.github/workflows/lint.yml` (type check, ShellCheck, plist parse, config docs, Markdown links, changelog links, gitleaks) check no runtime behavior. A plan or change that lists "run the tests" as its verification has none.
+
+A change to a handler's behavior is verified by triggering that path for real:
+
+- start the bot with `bun run dev` and send the command or message in the chat,
+- import the module with `bun -e` and print the values in question,
+- send an alert to `$ALERT_SOCKET_PATH` with `socat`.
+
+Numbers in a plan or in the docs (line counts, prompt lengths, dependency versions) are measured, not estimated. Changes to the security surface are checked against `SECURITY.md` and `docs/security-limitations.md`.
 
 ### External Dependencies
 

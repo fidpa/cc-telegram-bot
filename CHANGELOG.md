@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-11-24: Bot sessions no longer receive the account's claude.ai connectors
+
+One security fix, dependency updates within their declared ranges, and a clarified
+`AGENTS.md`. No configuration changes. An installation that reached claude.ai
+connectors through the bot loses them; MCP servers it needs belong in `mcp-config.ts`
+or in the user or project settings.
+
+### Security
+
+- **Bot sessions no longer receive the account's claude.ai connectors.** The Claude
+  CLI attaches the connectors configured on claude.ai (Gmail, Google Drive, Calendar
+  and any others) to every Agent SDK session. Under `bypassPermissions` the agent
+  could call them without a prompt, triggered by a Telegram message. The session
+  now passes `disableClaudeAiConnectors: true`; MCP access is limited to the
+  bot's own servers and those in the user and project settings. Measured on the
+  init message of an SDK session: seven `claude.ai` servers without the setting,
+  none with it. Ported from upstream
+  [linuz90/claude-telegram-bot@15ef689](https://github.com/linuz90/claude-telegram-bot/commit/15ef6893fd20fb8ae4b69060bf4f4df07880f337).
+
+### Changed
+
+- **Dependencies updated within their declared ranges.** `@anthropic-ai/claude-agent-sdk`
+  0.3.316 -> 0.3.331, `grammy` 1.46.0 -> 1.48.0 (Bot API 10.4 and 10.5) and
+  `@types/bun` 1.4.4 -> 1.4.5. The SDK's one breaking change in this range, hook
+  options must be arrays (0.3.327), does not affect the bot: `buildSafetyHook()`
+  already returns one. Since 0.3.330 the SDK warns with `settings_not_in_effect`
+  when `settings` fails validation, so a silently ignored
+  `disableClaudeAiConnectors` would now show up. The connector measurement above
+  was repeated on 0.3.331 with the same result. TypeScript stays on 5.9: version 7
+  is a new major release and is not part of this update
+
+### Documentation
+
+- **`AGENTS.md` says which `CLAUDE.md` is which, and what verification means here.** Its
+  heading read `# CLAUDE.md`, while the root `CLAUDE.md` is the bot's example system
+  prompt. The file now carries its own name, warns against treating the root
+  `CLAUDE.md` as agent instructions, and gains a "Verification" section: there is no
+  test suite, so behavior changes are verified by triggering the path for real.
+
 ## [1.4.0] - 2026-11-01: /model and the default model move to the current generation
 
 The default model changes for every installation that leaves `CLAUDE_MODEL` unset,
@@ -592,7 +631,8 @@ heading, which described a release that shipped four unrelated files.
 - Core architecture: grammY Telegram bot, Claude Agent SDK integration, streaming responses,
   multi-modal input (text, voice, photo, document, video), MCP support
 
-[Unreleased]: https://github.com/fidpa/cc-telegram-bot/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/fidpa/cc-telegram-bot/compare/v1.4.1...HEAD
+[1.4.1]: https://github.com/fidpa/cc-telegram-bot/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/fidpa/cc-telegram-bot/compare/v1.3.6...v1.4.0
 [1.3.6]: https://github.com/fidpa/cc-telegram-bot/compare/v1.3.5...v1.3.6
 [1.3.5]: https://github.com/fidpa/cc-telegram-bot/compare/v1.3.4...v1.3.5
